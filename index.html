@@ -180,7 +180,10 @@
   </main>
 
   <div id="logPanel">
-    <button class="log-clear" id="logClear">Очистить лог</button>
+    <div style="display:flex;gap:8px">
+      <button class="log-clear" id="logClear">Очистить</button>
+      <button class="log-clear" id="logCopy">Скопировать</button>
+    </div>
     <div id="logList"></div>
   </div>
 </div>
@@ -301,6 +304,25 @@ $('#tabLog').addEventListener('click',()=>{
   errCount=0; errCntEl.style.display='none';
 });
 $('#logClear').addEventListener('click',()=>{ logListEl.innerHTML=''; errCount=0; errCntEl.style.display='none'; });
+$('#logCopy').addEventListener('click',()=>{
+  const entries=[...logListEl.querySelectorAll('.log-entry')].reverse();
+  const txt=entries.map(e=>{
+    const t=e.querySelector('.lt')?.textContent||'';
+    const lv=e.querySelector('.lv')?.textContent||'';
+    const pre=e.querySelector('pre')?.textContent||'';
+    const rest=e.querySelector('div:last-child')?.childNodes;
+    let msg='';
+    if(rest) rest.forEach(n=>{ if(n.nodeType===3) msg+=n.textContent; });
+    return '['+t+'] '+lv+' '+msg.trim()+(pre?' | '+pre.trim():'');
+  }).join('\n');
+  navigator.clipboard.writeText(txt).then(()=>toast('Лог скопирован','ok')).catch(()=>{
+    // fallback для Safari
+    const ta=document.createElement('textarea');
+    ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); toast('Лог скопирован','ok');
+  });
+});
 
 /* ---------- Toast ---------- */
 let toastT;
@@ -431,7 +453,9 @@ function startListening(ctx){
   recog=new SR();
   recog.lang='ru-RU';
   recog.interimResults=true;
-  recog.continuous=true;
+  recog.continuous=false; // Safari: false надёжнее
+  recog.maxAlternatives=1;
+
   recog.onresult=e=>{
     let interim='';
     for(let i=e.resultIndex;i<e.results.length;i++){
@@ -439,29 +463,42 @@ function startListening(ctx){
       if(r.isFinal) finalTranscript+=r[0].transcript;
       else interim+=r[0].transcript;
     }
+    log('info','onresult','final:«'+finalTranscript+'» interim:«'+interim+'»');
     heard.textContent=(finalTranscript+interim)||'Слушаю…';
   };
+
   recog.onerror=e=>{
-    if(e.error==='no-speech'){ /* мягко */ }
-    else if(e.error==='not-allowed') toast('Нет доступа к микрофону','err');
-    else { log('err','Web Speech API: '+e.error); toast('Ошибка распознавания: '+e.error,'err'); }
+    log('err','recog.onerror: '+e.error);
+    if(e.error==='not-allowed') toast('Нет доступа к микрофону','err');
+    else if(e.error!=='no-speech') toast('Ошибка: '+e.error,'err');
   };
-  try{ recog.start(); log('info','recog.start() OK'); }catch(e){ log('err','recog.start() failed', String(e)); }
+
+  // onend — единственное надёжное место на Safari где транскрипт уже готов
+  recog.onend=()=>{
+    log('info','recog.onend','transcript:«'+finalTranscript.trim()+'»');
+    finishListening();
+  };
+
+  try{ recog.start(); log('info','recog.start() OK'); }catch(e){ log('err','recog.start() failed',String(e)); }
 }
 
 function stopListening(){
-  log('info','stopListening вызван', 'transcript: «'+finalTranscript.trim()+'»');
+  log('info','stopListening: сигнал остановки');
+  document.querySelectorAll('.holding').forEach(e=>e.classList.remove('holding'));
+  if(recog){ try{ recog.stop(); }catch(e){ log('warn','recog.stop() err',String(e)); } }
+  // finishListening() вызовется из recog.onend
+}
+
+function finishListening(){
   listening.classList.remove('show');
-  if(recog){ try{recog.stop();}catch(_){ } }
   const text=finalTranscript.trim();
   const ctx=activeCtx; activeCtx=null;
-  setTimeout(()=>{ document.querySelectorAll('.holding').forEach(e=>e.classList.remove('holding')); },50);
   if(text){
-    log('info', 'Транскрипт', text);
-    log('info', 'Контекст', JSON.stringify(ctx));
+    log('info','Транскрипт',text);
+    log('info','Контекст',JSON.stringify(ctx));
     handleText(text,ctx);
   } else {
-    log('warn', 'Ничего не услышал');
+    log('warn','Ничего не услышал — finalTranscript пустой');
     toast('Ничего не услышал');
   }
 }
