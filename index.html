@@ -400,19 +400,9 @@ function attachHold(el, ctx){
       startListening(ctx);
     },HOLD_MS);
   };
-  const end=(e)=>{
-    clearTimeout(holdTimer);
-    if(wasHold){
-      el.classList.remove('holding');
-      stopListening();
-    }
-  };
+
   el.addEventListener('touchstart',start,{passive:true});
-  el.addEventListener('touchend',end);
-  el.addEventListener('touchcancel',end);
   el.addEventListener('mousedown',start);
-  el.addEventListener('mouseup',end);
-  el.addEventListener('mouseleave',()=>{ if(holdTimer){clearTimeout(holdTimer);} });
 }
 
 /* search element hold */
@@ -430,7 +420,8 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recog=null, finalTranscript='';
 
 function startListening(ctx){
-  if(!SR){ toast('Браузер не поддерживает распознавание речи','err'); wasHold=false; return; }
+  if(!SR){ log('err','startListening: SR недоступен'); toast('Браузер не поддерживает распознавание речи','err'); wasHold=false; return; }
+  log('info','startListening вызван', JSON.stringify(ctx));
   finalTranscript='';
   ctxLabel.textContent = ctx.kind==='item' ? '→ '+truncate(ctx.label,40)
     : ctx.kind==='nav' ? '→ '+ctx.label : 'Поиск / добавление';
@@ -455,10 +446,11 @@ function startListening(ctx){
     else if(e.error==='not-allowed') toast('Нет доступа к микрофону','err');
     else { log('err','Web Speech API: '+e.error); toast('Ошибка распознавания: '+e.error,'err'); }
   };
-  try{ recog.start(); }catch(_){}
+  try{ recog.start(); log('info','recog.start() OK'); }catch(e){ log('err','recog.start() failed', String(e)); }
 }
 
 function stopListening(){
+  log('info','stopListening вызван', 'transcript: «'+finalTranscript.trim()+'»');
   listening.classList.remove('show');
   if(recog){ try{recog.stop();}catch(_){ } }
   const text=finalTranscript.trim();
@@ -722,9 +714,21 @@ async function init(){
 }
 init();
 
+/* глобальный обработчик окончания жеста — надёжнее на iOS Safari */
+document.addEventListener('touchend', globalEnd, {passive:true});
+document.addEventListener('touchcancel', globalEnd, {passive:true});
+document.addEventListener('mouseup', globalEnd);
+
+function globalEnd(e){
+  if(!wasHold){ clearTimeout(holdTimer); return; }
+  // убираем holding со всех элементов
+  document.querySelectorAll('.holding').forEach(el=>el.classList.remove('holding'));
+  stopListening();
+}
+
 /* запрет зума двойным тапом на iOS */
 let lastTap=0;
-document.addEventListener('touchend',e=>{ const n=Date.now(); if(n-lastTap<300) e.preventDefault(); lastTap=n; },{passive:false});
+document.addEventListener('touchstart',e=>{ const n=Date.now(); if(n-lastTap<300) e.preventDefault(); lastTap=n; },{passive:false});
 </script>
 </body>
 </html>
