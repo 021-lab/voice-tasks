@@ -1,0 +1,2015 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#102322">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VoiceTasks">
+  <title>VoiceTasks</title>
+  <style>
+    :root {
+      --bg: #f7f2e8;
+      --bg-accent: #efe3cc;
+      --surface: rgba(255, 252, 246, 0.92);
+      --surface-strong: #fffcf6;
+      --text: #18231d;
+      --muted: #5d6f65;
+      --border: rgba(24, 35, 29, 0.12);
+      --accent: #1f6b5d;
+      --accent-strong: #11473d;
+      --warn: #d97c26;
+      --done: #3f8150;
+      --danger: #bd4d3d;
+      --tag: #365b9d;
+      --shadow: 0 18px 50px rgba(25, 45, 37, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+    }
+
+    body {
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 32%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-accent) 100%);
+      overflow-x: hidden;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: auto;
+      border-radius: 999px;
+      filter: blur(6px);
+      opacity: 0.24;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::before {
+      width: 220px;
+      height: 220px;
+      top: -40px;
+      right: -60px;
+      background: rgba(217, 124, 38, 0.22);
+    }
+
+    body::after {
+      width: 180px;
+      height: 180px;
+      bottom: 80px;
+      left: -70px;
+      background: rgba(54, 91, 157, 0.18);
+    }
+
+    .app-shell {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      padding: 16px 16px 12px;
+      backdrop-filter: blur(18px);
+      background: rgba(247, 242, 232, 0.8);
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(31, 107, 93, 0.98), rgba(17, 71, 61, 0.98));
+      color: #fffaf0;
+      padding: 18px;
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .brand {
+      flex: 1;
+    }
+
+    .brand-kicker {
+      display: inline-block;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      opacity: 0.72;
+      margin-bottom: 8px;
+    }
+
+    .brand h1 {
+      font-size: 24px;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+
+    .brand p {
+      font-size: 13px;
+      line-height: 1.45;
+      opacity: 0.86;
+    }
+
+    .icon-btn,
+    .action-btn,
+    .tab-btn {
+      border: 0;
+      font: inherit;
+      cursor: pointer;
+      appearance: none;
+    }
+
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.16);
+      color: #fffaf0;
+      font-size: 20px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    }
+
+    .hero-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .action-btn {
+      min-height: 54px;
+      border-radius: 18px;
+      padding: 0 16px;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+
+    .action-btn:active,
+    .icon-btn:active,
+    .tab-btn:active {
+      transform: scale(0.98);
+    }
+
+    #btn-ptt {
+      background: linear-gradient(135deg, #fff6dd, #f2c27d);
+      color: #24312a;
+      text-align: left;
+      box-shadow: inset 0 0 0 1px rgba(36, 49, 42, 0.08);
+    }
+
+    #btn-ptt strong,
+    #btn-undo strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 2px;
+    }
+
+    #btn-ptt span,
+    #btn-undo span {
+      display: block;
+      font-size: 11px;
+      opacity: 0.78;
+    }
+
+    #btn-undo {
+      min-width: 104px;
+      background: rgba(255, 255, 255, 0.18);
+      color: #fffaf0;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 16px;
+      padding-bottom: 10px;
+    }
+
+    .tab-btn {
+      min-height: 44px;
+      border-radius: 999px;
+      background: rgba(255, 252, 246, 0.68);
+      color: var(--muted);
+      box-shadow: inset 0 0 0 1px rgba(24, 35, 29, 0.08);
+    }
+
+    .tab-btn.active {
+      background: var(--surface-strong);
+      color: var(--text);
+      box-shadow:
+        inset 0 0 0 1px rgba(24, 35, 29, 0.08),
+        0 8px 24px rgba(25, 45, 37, 0.08);
+    }
+
+    main {
+      flex: 1;
+      padding: 0 16px 24px;
+    }
+
+    .panel {
+      display: block;
+    }
+
+    .panel[hidden] {
+      display: none;
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .surface-card {
+      background: var(--surface);
+      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.38);
+      box-shadow: var(--shadow);
+    }
+
+    #task-panel {
+      padding: 16px;
+    }
+
+    #task-list,
+    #log-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .empty-state {
+      padding: 28px 18px;
+      border-radius: 20px;
+      border: 1px dashed rgba(24, 35, 29, 0.16);
+      text-align: center;
+      color: var(--muted);
+      line-height: 1.55;
+      background: rgba(255, 255, 255, 0.42);
+    }
+
+    .task-item,
+    .log-item {
+      background: rgba(255, 255, 255, 0.7);
+      border-radius: 22px;
+      padding: 16px;
+      border: 1px solid rgba(24, 35, 29, 0.08);
+      box-shadow: 0 8px 24px rgba(24, 35, 29, 0.05);
+      transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+    }
+
+    .task-item {
+      border-left: 6px solid var(--accent);
+    }
+
+    .task-item[data-status="фокус"] {
+      border-left-color: var(--warn);
+    }
+
+    .task-item[data-status="жду"] {
+      border-left-color: var(--tag);
+    }
+
+    .task-item[data-status="архив"] {
+      border-left-color: #8d8e84;
+      opacity: 0.74;
+    }
+
+    .task-item[data-status="сделано"] {
+      border-left-color: var(--done);
+      opacity: 0.9;
+    }
+
+    .task-item[data-status="отложено"] {
+      border-left-color: #b06535;
+    }
+
+    .task-item[data-status="делегирована"] {
+      border-left-color: #8c4e9e;
+    }
+
+    .task-item.flash,
+    .log-item.flash {
+      background: rgba(242, 194, 125, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .task-head,
+    .log-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .task-glyph,
+    .log-glyph {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 42px;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(31, 107, 93, 0.08);
+      font-size: 20px;
+    }
+
+    .log-glyph {
+      background: rgba(54, 91, 157, 0.08);
+    }
+
+    .task-title {
+      font-size: 16px;
+      line-height: 1.4;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .task-meta,
+    .log-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 26px;
+      border-radius: 999px;
+      padding: 0 10px;
+      font-size: 12px;
+      background: rgba(24, 35, 29, 0.06);
+      color: var(--muted);
+    }
+
+    .pill.status {
+      color: var(--accent-strong);
+      background: rgba(31, 107, 93, 0.09);
+    }
+
+    .pill.tag {
+      color: var(--tag);
+      background: rgba(54, 91, 157, 0.09);
+    }
+
+    #log-panel {
+      padding: 16px;
+    }
+
+    .log-toolbar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .log-tool-btn {
+      min-height: 44px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--text);
+      border: 1px solid rgba(24, 35, 29, 0.08);
+    }
+
+    .log-route {
+      display: inline-flex;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--tag);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .log-data {
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--muted);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .log-comment {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed rgba(24, 35, 29, 0.12);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--warn);
+    }
+
+    .overlay,
+    .modal-root {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(16, 35, 34, 0.78);
+      backdrop-filter: blur(10px);
+    }
+
+    .overlay[hidden],
+    .modal-root[hidden],
+    .toast[hidden] {
+      display: none !important;
+    }
+
+    .overlay-card {
+      width: min(360px, 100%);
+      text-align: center;
+      color: #fffaf0;
+    }
+
+    .overlay-mic {
+      width: 112px;
+      height: 112px;
+      margin: 0 auto 18px;
+      border-radius: 32px;
+      background: linear-gradient(135deg, rgba(255, 246, 221, 0.98), rgba(242, 194, 125, 0.96));
+      color: #22332c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 54px;
+      animation: pulse 1.2s ease-in-out infinite;
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.2);
+    }
+
+    .overlay-title {
+      font-size: 13px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      opacity: 0.72;
+      margin-bottom: 10px;
+    }
+
+    .overlay-text {
+      font-size: 18px;
+      line-height: 1.45;
+      min-height: 52px;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.08);
+      }
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      min-width: min(280px, calc(100vw - 32px));
+      max-width: calc(100vw - 32px);
+      padding: 14px 18px;
+      border-radius: 18px;
+      background: rgba(24, 35, 29, 0.94);
+      color: #fffaf0;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.25);
+      z-index: 80;
+      text-align: center;
+    }
+
+    .modal-card {
+      width: min(420px, 100%);
+      background: var(--surface-strong);
+      color: var(--text);
+      border-radius: 28px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .modal-card h2 {
+      font-size: 22px;
+      margin-bottom: 10px;
+    }
+
+    .modal-card p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      margin-bottom: 14px;
+    }
+
+    #settings-textarea {
+      width: 100%;
+      min-height: 190px;
+      resize: vertical;
+      border: 1px solid rgba(24, 35, 29, 0.12);
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.85);
+      color: var(--text);
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      outline: none;
+    }
+
+    .modal-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .modal-btn {
+      min-height: 48px;
+      border-radius: 16px;
+      background: rgba(24, 35, 29, 0.06);
+      color: var(--text);
+      border: 0;
+    }
+
+    .modal-btn.primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      color: #fffaf0;
+    }
+
+    @media (max-width: 360px) {
+      .hero-actions,
+      .modal-actions,
+      .log-toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .task-head,
+      .log-head {
+        flex-direction: column;
+      }
+
+      .task-glyph,
+      .log-glyph {
+        width: 36px;
+        height: 36px;
+        flex-basis: 36px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header>
+      <div class="hero">
+        <div class="hero-top">
+          <div class="brand">
+            <span class="brand-kicker">Voice Task List</span>
+            <h1>VoiceTasks</h1>
+            <p>Долгое нажатие запускает голосовую команду. Короткий тап только подсвечивает задачу.</p>
+          </div>
+          <button class="icon-btn" id="btn-settings" aria-label="Открыть настройки">⚙</button>
+        </div>
+        <div class="hero-actions">
+          <button class="action-btn" id="btn-ptt">
+            <strong>Найди / Добавь</strong>
+            <span>Держите кнопку и говорите</span>
+          </button>
+          <button class="action-btn" id="btn-undo">
+            <strong>Undo</strong>
+            <span>Последнее изменение</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-tasks">Задачи</button>
+      <button class="tab-btn" id="tab-log">Лог</button>
+    </div>
+
+    <main>
+      <section class="panel surface-card" id="task-panel">
+        <div class="stack">
+          <div class="empty-state" id="task-empty">
+            Пока нет задач. Долгое нажатие на кнопку выше добавит задачу или запустит поиск.
+          </div>
+          <ul id="task-list"></ul>
+        </div>
+      </section>
+
+      <section class="panel surface-card" id="log-panel" hidden>
+        <div class="log-toolbar">
+          <button class="log-tool-btn" id="btn-clear-log">Очистить лог</button>
+          <button class="log-tool-btn" id="btn-copy-log">Копировать</button>
+        </div>
+        <div class="stack">
+          <div class="empty-state" id="log-empty">
+            Лог межмодульных передач появится здесь. Долгое нажатие на запись добавит голосовой комментарий.
+          </div>
+          <ul id="log-list"></ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="overlay" id="ptt-overlay" hidden>
+    <div class="overlay-card">
+      <div class="overlay-mic">🎙</div>
+      <div class="overlay-title" id="overlay-title">Запись</div>
+      <div class="overlay-text" id="overlay-text">Запись…</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <div class="modal-root" id="settings-modal" hidden>
+    <div class="modal-card">
+      <h2>Настройки</h2>
+      <p>Вставьте `.env`-текст. Значения сохраняются в `localStorage['vt_env']` и становятся доступны как `window.__cfg`.</p>
+      <textarea id="settings-textarea" autocomplete="off" spellcheck="false" placeholder="QDRANT_URL=https://xxx.qdrant.io&#10;QDRANT_KEY=abc123&#10;LLM_PROVIDER=openrouter&#10;LLM_KEY=sk-or-...&#10;LLM_MODEL=anthropic/claude-haiku-4-5-20251001"></textarea>
+      <div class="modal-actions">
+        <button class="modal-btn" id="btn-close-settings">Отмена</button>
+        <button class="modal-btn primary" id="btn-save-settings">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+
+    const STATUSES = ["сегодня", "фокус", "жду", "архив", "сделано", "отложено", "делегирована"];
+    const STATUS_LABELS = {
+      "сегодня": "Сегодня",
+      "фокус": "Фокус",
+      "жду": "Жду",
+      "архив": "Архив",
+      "сделано": "Сделано",
+      "отложено": "Отложено",
+      "делегирована": "Делегирована"
+    };
+    const STATUS_ICONS = {
+      "сегодня": "•",
+      "фокус": "◉",
+      "жду": "…",
+      "архив": "□",
+      "сделано": "✓",
+      "отложено": "↺",
+      "делегирована": "⇢"
+    };
+
+    window.__cfg = {};
+    window.__tasksCache = [];
+    window.__logCache = [];
+    window.__undoSnapshot = null;
+
+    const dom = {
+      taskList: document.getElementById("task-list"),
+      taskEmpty: document.getElementById("task-empty"),
+      logList: document.getElementById("log-list"),
+      logEmpty: document.getElementById("log-empty"),
+      taskPanel: document.getElementById("task-panel"),
+      logPanel: document.getElementById("log-panel"),
+      tabTasks: document.getElementById("tab-tasks"),
+      tabLog: document.getElementById("tab-log"),
+      overlay: document.getElementById("ptt-overlay"),
+      overlayTitle: document.getElementById("overlay-title"),
+      overlayText: document.getElementById("overlay-text"),
+      toast: document.getElementById("toast"),
+      settingsModal: document.getElementById("settings-modal"),
+      settingsTextarea: document.getElementById("settings-textarea"),
+      btnSettings: document.getElementById("btn-settings"),
+      btnCloseSettings: document.getElementById("btn-close-settings"),
+      btnSaveSettings: document.getElementById("btn-save-settings"),
+      btnPtt: document.getElementById("btn-ptt"),
+      btnUndo: document.getElementById("btn-undo"),
+      btnClearLog: document.getElementById("btn-clear-log"),
+      btnCopyLog: document.getElementById("btn-copy-log")
+    };
+
+    function toast(message, timeout) {
+      const duration = timeout || 3000;
+      dom.toast.textContent = message;
+      dom.toast.hidden = false;
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => {
+        dom.toast.hidden = true;
+      }, duration);
+    }
+
+    function showOverlay(mode, text) {
+      dom.overlayTitle.textContent = mode || "Запись";
+      dom.overlayText.textContent = text || "Запись…";
+      dom.overlay.hidden = false;
+    }
+
+    function updateOverlayText(text) {
+      if (text) {
+        dom.overlayText.textContent = text;
+      }
+    }
+
+    function hideOverlay() {
+      dom.overlay.hidden = true;
+      dom.overlayTitle.textContent = "Запись";
+      dom.overlayText.textContent = "Запись…";
+    }
+
+    function flashElement(element) {
+      if (!element) {
+        return;
+      }
+      element.classList.add("flash");
+      setTimeout(() => {
+        element.classList.remove("flash");
+      }, 500);
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function safeJson(value) {
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch (_error) {
+        return String(value);
+      }
+    }
+
+    function normalizeText(value) {
+      return String(value || "")
+        .toLowerCase()
+        .replace(/[.,!?;:()"]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function cloneTasks(tasks) {
+      return JSON.parse(JSON.stringify(tasks || []));
+    }
+
+    function parseTagsFromText(text) {
+      const normalized = normalizeText(text);
+      const tags = [];
+      const tagPatterns = [
+        /с тегом ([\p{L}\p{N}_-]+)/u,
+        /тег ([\p{L}\p{N}_-]+)/u,
+        /#([\p{L}\p{N}_-]+)/u
+      ];
+      tagPatterns.forEach((pattern) => {
+        const match = normalized.match(pattern);
+        if (match && match[1]) {
+          tags.push(match[1]);
+        }
+      });
+      return Array.from(new Set(tags));
+    }
+
+    const STATUS_ALIASES = {
+      "сегодня": "сегодня",
+      "сегодняшние": "сегодня",
+      "фокус": "фокус",
+      "в фокусе": "фокус",
+      "жду": "жду",
+      "в ожидании": "жду",
+      "архив": "архив",
+      "в архиве": "архив",
+      "сделано": "сделано",
+      "сделанные": "сделано",
+      "завершенные": "сделано",
+      "отложено": "отложено",
+      "отложенные": "отложено",
+      "делегирована": "делегирована",
+      "делегированные": "делегирована"
+    };
+
+    function parseStatusFromText(text) {
+      const normalized = normalizeText(text);
+      const alias = Object.keys(STATUS_ALIASES).find((key) => normalized.includes(key));
+      return alias ? STATUS_ALIASES[alias] : null;
+    }
+
+    function cleanupSearchText(text) {
+      let normalized = normalizeText(text);
+      Object.keys(STATUS_ALIASES).forEach((key) => {
+        normalized = normalized.replace(new RegExp("\\b" + key + "\\b", "gu"), " ");
+      });
+      normalized = normalized.replace(/\bс тегом [\p{L}\p{N}_-]+\b/gu, " ");
+      normalized = normalized.replace(/\bтег [\p{L}\p{N}_-]+\b/gu, " ");
+      normalized = normalized.replace(/#[\p{L}\p{N}_-]+\b/gu, " ");
+      normalized = normalized.replace(/\s+/g, " ").trim();
+      return normalized;
+    }
+
+    function tasksToScrollResult(tasks) {
+      return tasks.map((task) => ({
+        id: task.id,
+        payload: {
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          tags: Array.isArray(task.tags) ? task.tags : []
+        }
+      }));
+    }
+
+    function logToScrollResult(logs) {
+      return logs.map((entry) => ({
+        id: entry.id,
+        payload: entry
+      }));
+    }
+
+    const settingsModule = (() => {
+      const envMap = {
+        QDRANT_URL: "qdrantUrl",
+        QDRANT_KEY: "qdrantKey",
+        LLM_PROVIDER: "llmProvider",
+        LLM_KEY: "llmKey",
+        LLM_MODEL: "llmModel"
+      };
+
+      function parseEnv(raw) {
+        const cfg = {};
+        String(raw || "")
+          .split(/\r?\n/)
+          .forEach((line) => {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith("#")) {
+              return;
+            }
+            const divider = trimmed.indexOf("=");
+            if (divider < 1) {
+              return;
+            }
+            const key = trimmed.slice(0, divider).trim();
+            const value = trimmed.slice(divider + 1).trim();
+            if (envMap[key]) {
+              cfg[envMap[key]] = value;
+            }
+          });
+        return cfg;
+      }
+
+      function init() {
+        const raw = localStorage.getItem("vt_env") || "";
+        if (!raw.trim()) {
+          openModal();
+          return;
+        }
+        window.__cfg = parseEnv(raw);
+      }
+
+      function openModal() {
+        dom.settingsTextarea.value = localStorage.getItem("vt_env") || "";
+        dom.settingsModal.hidden = false;
+      }
+
+      function closeModal() {
+        dom.settingsModal.hidden = true;
+      }
+
+      function save() {
+        const raw = dom.settingsTextarea.value.trim();
+        localStorage.setItem("vt_env", raw);
+        window.__cfg = parseEnv(raw);
+        closeModal();
+        toast("Настройки сохранены");
+        app.loadAll();
+      }
+
+      return {
+        init,
+        openModal,
+        closeModal,
+        save,
+        parseEnv
+      };
+    })();
+
+    const QdrantBackend = (() => {
+      const collections = new Set();
+      const FALLBACK_STORE = {
+        tasks: new Map(),
+        log: new Map()
+      };
+
+      async function _req(method, path, body) {
+        const cfg = window.__cfg || {};
+        if (!cfg.qdrantUrl) {
+          return fallbackReq(method, path, body);
+        }
+
+        const url = cfg.qdrantUrl.replace(/\/$/, "") + path;
+        const response = await fetch(url, {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            "api-key": cfg.qdrantKey || ""
+          },
+          body: body === undefined ? undefined : JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+          const error = new Error("Qdrant request failed");
+          error.status = response.status;
+          error.detail = await response.text().catch(() => "");
+          throw error;
+        }
+
+        return response.json().catch(() => ({}));
+      }
+
+      async function fallbackReq(method, path, body) {
+        const route = path.replace(/\?.*$/, "");
+        const collectionMatch = route.match(/^\/collections\/([^/]+)$/);
+        const pointMatch = route.match(/^\/collections\/([^/]+)\/points\/([^/]+)$/);
+        const pointsMatch = route.match(/^\/collections\/([^/]+)\/points$/);
+        const scrollMatch = route.match(/^\/collections\/([^/]+)\/points\/scroll$/);
+        const deleteMatch = route.match(/^\/collections\/([^/]+)\/points\/delete$/);
+
+        if (collectionMatch) {
+          collections.add(collectionMatch[1]);
+          return { result: true };
+        }
+
+        if (pointsMatch && method === "PUT") {
+          const collection = pointsMatch[1];
+          const store = getStore(collection);
+          (body.points || []).forEach((point) => {
+            store.set(String(point.id), JSON.parse(JSON.stringify(point.payload)));
+          });
+          return { result: { status: "ok" } };
+        }
+
+        if (pointMatch && method === "GET") {
+          const collection = pointMatch[1];
+          const id = pointMatch[2];
+          const store = getStore(collection);
+          const payload = store.get(String(id));
+          if (!payload) {
+            const error = new Error("Not found");
+            error.status = 404;
+            throw error;
+          }
+          return { result: { id, payload } };
+        }
+
+        if (scrollMatch && method === "POST") {
+          const collection = scrollMatch[1];
+          const store = getStore(collection);
+          const entries = Array.from(store.entries()).map(([id, payload]) => ({ id, payload }));
+          const filtered = applyFallbackFilter(collection, entries, body && body.filter);
+          return { result: { points: filtered } };
+        }
+
+        if (deleteMatch && method === "POST") {
+          const collection = deleteMatch[1];
+          const store = getStore(collection);
+          const points = body.points || [];
+          points.forEach((id) => store.delete(String(id)));
+          return { result: { status: "ok" } };
+        }
+
+        if (pointMatch && method === "DELETE") {
+          const collection = pointMatch[1];
+          const id = pointMatch[2];
+          const store = getStore(collection);
+          store.delete(String(id));
+          return { result: { status: "ok" } };
+        }
+
+        return { result: {} };
+      }
+
+      function getStore(collection) {
+        if (collection === "tasks") {
+          return FALLBACK_STORE.tasks;
+        }
+        return FALLBACK_STORE.log;
+      }
+
+      function applyFallbackFilter(collection, entries, filter) {
+        if (!filter || !Array.isArray(filter.must) || !filter.must.length) {
+          return collection === "log" ? entries.reverse() : entries;
+        }
+
+        return entries.filter((entry) => {
+          return filter.must.every((rule) => {
+            if (!rule.key) {
+              return true;
+            }
+
+            const value = entry.payload[rule.key];
+            if (rule.match && Object.prototype.hasOwnProperty.call(rule.match, "value")) {
+              return value === rule.match.value;
+            }
+
+            if (rule.match && Object.prototype.hasOwnProperty.call(rule.match, "text")) {
+              return String(entry.payload.title || "").toLowerCase().includes(String(rule.match.text).toLowerCase());
+            }
+
+            if (rule.match && Array.isArray(rule.match.any)) {
+              const arr = Array.isArray(value) ? value : [];
+              return rule.match.any.every((tag) => arr.includes(tag));
+            }
+
+            return true;
+          });
+        });
+      }
+
+      async function ensureCollection(name) {
+        if (collections.has(name)) {
+          return;
+        }
+        try {
+          await _req("GET", "/collections/" + name);
+          collections.add(name);
+        } catch (error) {
+          if (error && error.status === 404) {
+            await _req("PUT", "/collections/" + name, {
+              vectors: { size: 1, distance: "Cosine" }
+            });
+            collections.add(name);
+            return;
+          }
+          if (!window.__cfg.qdrantUrl) {
+            collections.add(name);
+            return;
+          }
+          throw error;
+        }
+      }
+
+      async function getTask(id) {
+        await ensureCollection("tasks");
+        const response = await _req("GET", "/collections/tasks/points/" + encodeURIComponent(id));
+        return response.result && response.result.payload ? response.result.payload : null;
+      }
+
+      async function upsertTask(task) {
+        await ensureCollection("tasks");
+        const payload = {
+          id: task.id,
+          title: task.title,
+          status: task.status || "сегодня",
+          tags: Array.isArray(task.tags) ? task.tags : []
+        };
+        await _req("PUT", "/collections/tasks/points", {
+          points: [{ id: payload.id, vector: [0.0], payload }]
+        });
+        return payload;
+      }
+
+      async function deleteTask(id) {
+        await ensureCollection("tasks");
+        await _req("DELETE", "/collections/tasks/points/" + encodeURIComponent(id));
+        return true;
+      }
+
+      async function replaceAllTasks(tasks) {
+        await ensureCollection("tasks");
+        const current = await queryTasks({});
+        const currentIds = current.map((task) => task.id);
+        if (currentIds.length) {
+          await _req("POST", "/collections/tasks/points/delete", { points: currentIds });
+        }
+        if (tasks.length) {
+          await _req("PUT", "/collections/tasks/points", {
+            points: tasks.map((task) => ({
+              id: task.id,
+              vector: [0.0],
+              payload: {
+                id: task.id,
+                title: task.title,
+                status: task.status || "сегодня",
+                tags: Array.isArray(task.tags) ? task.tags : []
+              }
+            }))
+          });
+        }
+        return cloneTasks(tasks);
+      }
+
+      async function queryTasks(query) {
+        await ensureCollection("tasks");
+        const response = await _req("POST", "/collections/tasks/points/scroll", {
+          limit: 200,
+          with_payload: true,
+          with_vector: false
+        });
+        const points = response.result && response.result.points ? response.result.points : [];
+        const tasks = points.map((point) => point.payload).filter(Boolean);
+        return tasks.filter((task) => {
+          if (query.status && task.status !== query.status) {
+            return false;
+          }
+          if (Array.isArray(query.tags) && query.tags.length) {
+            const tags = Array.isArray(task.tags) ? task.tags : [];
+            if (!query.tags.every((tag) => tags.includes(tag))) {
+              return false;
+            }
+          }
+          if (query.text) {
+            const title = normalizeText(task.title || "");
+            if (!title.includes(normalizeText(query.text))) {
+              return false;
+            }
+          }
+          return true;
+        });
+      }
+
+      async function saveLog(entry) {
+        await ensureCollection("log");
+        await _req("PUT", "/collections/log/points", {
+          points: [{ id: entry.id, vector: [0.0], payload: entry }]
+        });
+        return entry;
+      }
+
+      async function getLogs() {
+        await ensureCollection("log");
+        const response = await _req("POST", "/collections/log/points/scroll", {
+          limit: 300,
+          with_payload: true,
+          with_vector: false
+        });
+        const points = response.result && response.result.points ? response.result.points : [];
+        return points
+          .map((point) => point.payload)
+          .filter(Boolean)
+          .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
+      }
+
+      async function clearLogs() {
+        await ensureCollection("log");
+        const logs = await getLogs();
+        if (!logs.length) {
+          return true;
+        }
+        await _req("POST", "/collections/log/points/delete", {
+          points: logs.map((entry) => entry.id)
+        });
+        return true;
+      }
+
+      async function updateLogComment(id, comment) {
+        await ensureCollection("log");
+        const logs = await getLogs();
+        const current = logs.find((entry) => entry.id === id);
+        if (!current) {
+          throw new Error("Log entry not found");
+        }
+        const updated = Object.assign({}, current, { comment: comment || "" });
+        await saveLog(updated);
+        return updated;
+      }
+
+      return {
+        ensureCollection,
+        getTask,
+        upsertTask,
+        deleteTask,
+        replaceAllTasks,
+        queryTasks,
+        saveLog,
+        getLogs,
+        clearLogs,
+        updateLogComment,
+        _fallbackState: {
+          tasksToScrollResult,
+          logToScrollResult
+        }
+      };
+    })();
+
+    const undoModule = (() => {
+      function snapshot(tasks) {
+        window.__undoSnapshot = cloneTasks(tasks);
+      }
+
+      async function restore() {
+        if (!window.__undoSnapshot) {
+          toast("Нечего отменять");
+          return { ok: false, error: "empty" };
+        }
+        const restored = cloneTasks(window.__undoSnapshot);
+        await QdrantBackend.replaceAllTasks(restored);
+        window.__tasksCache = restored;
+        window.__undoSnapshot = null;
+        await logModule.emit("undo", "storage", { restored });
+        renderTasks(window.__tasksCache);
+        return { ok: true, tasks: restored };
+      }
+
+      return {
+        snapshot,
+        restore
+      };
+    })();
+
+    const storageModule = (() => {
+      function validatePatch(patch) {
+        if (!patch || !patch.op || !patch.task) {
+          throw new Error("Некорректный patch");
+        }
+        if (patch.op === "add" && !String(patch.task.title || "").trim()) {
+          throw new Error("Для add нужен title");
+        }
+        if ((patch.op === "update" || patch.op === "delete") && !String(patch.task.id || "").trim()) {
+          throw new Error("Для update/delete нужен id");
+        }
+      }
+
+      async function patch(patchData) {
+        try {
+          validatePatch(patchData);
+          const patch = JSON.parse(JSON.stringify(patchData));
+          if (patch.op !== "add") {
+            patch.task.id = String(patch.task.id);
+          }
+
+          undoModule.snapshot(window.__tasksCache);
+
+          if (patch.op === "add") {
+            const task = {
+              id: crypto.randomUUID(),
+              title: String(patch.task.title || "").trim(),
+              status: patch.task.status || "сегодня",
+              tags: Array.isArray(patch.task.tags) ? Array.from(new Set(patch.task.tags.filter(Boolean))) : []
+            };
+            const saved = await QdrantBackend.upsertTask(task);
+            window.__tasksCache = [saved].concat(window.__tasksCache);
+            return { ok: true, task: saved, tasks: cloneTasks(window.__tasksCache) };
+          }
+
+          if (patch.op === "delete") {
+            await QdrantBackend.deleteTask(patch.task.id);
+            window.__tasksCache = window.__tasksCache.filter((task) => task.id !== patch.task.id);
+            return { ok: true, tasks: cloneTasks(window.__tasksCache) };
+          }
+
+          const current = await QdrantBackend.getTask(patch.task.id);
+          if (!current) {
+            throw new Error("Задача не найдена");
+          }
+
+          const next = {
+            id: current.id,
+            title: Object.prototype.hasOwnProperty.call(patch.task, "title") ? String(patch.task.title).trim() : current.title,
+            status: Object.prototype.hasOwnProperty.call(patch.task, "status") ? patch.task.status : current.status,
+            tags: Array.isArray(current.tags) ? current.tags.slice() : []
+          };
+
+          if (Array.isArray(patch.task.tags) && patch.task.tags.length) {
+            next.tags = Array.from(new Set(next.tags.concat(patch.task.tags.filter(Boolean))));
+          }
+
+          if (Array.isArray(patch.task._removeTags) && patch.task._removeTags.length) {
+            const removeSet = new Set(patch.task._removeTags.map((tag) => String(tag).trim()).filter(Boolean));
+            next.tags = next.tags.filter((tag) => !removeSet.has(tag));
+          }
+
+          const saved = await QdrantBackend.upsertTask(next);
+          window.__tasksCache = window.__tasksCache.map((task) => task.id === saved.id ? saved : task);
+          return { ok: true, task: saved, tasks: cloneTasks(window.__tasksCache) };
+        } catch (error) {
+          return { ok: false, error: error && error.message ? error.message : "storage error" };
+        }
+      }
+
+      async function query(searchQuery) {
+        try {
+          const tasks = await QdrantBackend.queryTasks(searchQuery || {});
+          if (!searchQuery || (!searchQuery.text && !searchQuery.status && (!searchQuery.tags || !searchQuery.tags.length))) {
+            window.__tasksCache = cloneTasks(tasks);
+          }
+          return { ok: true, tasks };
+        } catch (error) {
+          return { ok: false, error: error && error.message ? error.message : "query error" };
+        }
+      }
+
+      const log = {
+        async save(entry) {
+          return QdrantBackend.saveLog(entry);
+        },
+        async list() {
+          const items = await QdrantBackend.getLogs();
+          window.__logCache = items;
+          return items;
+        },
+        async clear() {
+          await QdrantBackend.clearLogs();
+          window.__logCache = [];
+          return true;
+        },
+        async updateComment(id, comment) {
+          const updated = await QdrantBackend.updateLogComment(id, comment);
+          window.__logCache = window.__logCache.map((entry) => entry.id === updated.id ? updated : entry);
+          return updated;
+        }
+      };
+
+      return {
+        patch,
+        query,
+        log
+      };
+    })();
+
+    const logModule = (() => {
+      async function emit(from, to, data) {
+        const entry = {
+          id: crypto.randomUUID(),
+          ts: Date.now(),
+          from,
+          to,
+          data,
+          comment: ""
+        };
+        try {
+          await storageModule.log.save(entry);
+          window.__logCache = [entry].concat(window.__logCache).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
+          renderLogs(window.__logCache);
+        } catch (error) {
+          toast("Не удалось записать лог");
+        }
+        return entry;
+      }
+
+      async function load() {
+        try {
+          const items = await storageModule.log.list();
+          renderLogs(items);
+        } catch (error) {
+          toast("Не удалось загрузить лог");
+        }
+      }
+
+      async function clear() {
+        try {
+          await storageModule.log.clear();
+          renderLogs([]);
+          toast("Лог очищен");
+        } catch (error) {
+          toast("Не удалось очистить лог");
+        }
+      }
+
+      async function copy() {
+        const text = safeJson(window.__logCache);
+        try {
+          await navigator.clipboard.writeText(text);
+          toast("Лог скопирован");
+        } catch (error) {
+          toast("Буфер недоступен");
+        }
+      }
+
+      async function addVoiceComment(logId, transcript) {
+        if (!transcript.trim()) {
+          toast("Пустой комментарий");
+          return;
+        }
+        try {
+          await storageModule.log.updateComment(logId, transcript.trim());
+          renderLogs(window.__logCache);
+        } catch (error) {
+          toast("Не удалось сохранить комментарий");
+        }
+      }
+
+      return {
+        emit,
+        load,
+        clear,
+        copy,
+        addVoiceComment
+      };
+    })();
+
+    const cloudModule = (() => {
+      function systemPrompt(taskId) {
+        const tasks = window.__tasksCache.map((task) => ({
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          tags: task.tags || []
+        }));
+        return [
+          "Ты преобразуешь русскую голосовую команду в JSON.",
+          "Статусы: " + STATUSES.join(", "),
+          "Если есть taskId, верни Patch для существующей задачи.",
+          "Если taskId нет, верни либо Patch add/update/delete, либо SearchQuery.",
+          "Формат Patch: {\"kind\":\"patch\",\"value\":{\"op\":\"add|update|delete\",\"task\":{...}}}",
+          "Формат SearchQuery: {\"kind\":\"query\",\"value\":{\"text?\":\"...\",\"status?\":\"...\",\"tags?\":[]}}",
+          "Верни только JSON без markdown.",
+          "Текущие задачи: " + JSON.stringify(tasks),
+          taskId ? "Текущий taskId: " + taskId : "Текущий taskId отсутствует"
+        ].join("\n");
+      }
+
+      function providerRequest(url, headers, payload) {
+        return fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload)
+        });
+      }
+
+      async function parseResponse(provider, response) {
+        const data = await response.json();
+        if (provider === "openai") {
+          return data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : "";
+        }
+        if (provider === "anthropic") {
+          return Array.isArray(data.content) ? data.content.map((item) => item.text || "").join("\n") : "";
+        }
+        return data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : "";
+      }
+
+      async function request(transcript, taskId) {
+        const cfg = window.__cfg || {};
+        if (!cfg.llmKey) {
+          toast("Нет LLM-ключа");
+          return null;
+        }
+
+        const provider = (cfg.llmProvider || "openrouter").toLowerCase();
+        const model = cfg.llmModel || "openai/gpt-4.1-mini";
+        const prompt = systemPrompt(taskId);
+
+        let response;
+        try {
+          if (provider === "openai") {
+            response = await providerRequest("https://api.openai.com/v1/chat/completions", {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + cfg.llmKey
+            }, {
+              model,
+              temperature: 0,
+              messages: [
+                { role: "system", content: prompt },
+                { role: "user", content: transcript }
+              ]
+            });
+          } else if (provider === "anthropic") {
+            response = await providerRequest("https://api.anthropic.com/v1/messages", {
+              "Content-Type": "application/json",
+              "x-api-key": cfg.llmKey,
+              "anthropic-version": "2023-06-01"
+            }, {
+              model,
+              max_tokens: 300,
+              system: prompt,
+              messages: [{ role: "user", content: transcript }]
+            });
+          } else {
+            response = await providerRequest("https://openrouter.ai/api/v1/chat/completions", {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + cfg.llmKey
+            }, {
+              model,
+              temperature: 0,
+              messages: [
+                { role: "system", content: prompt },
+                { role: "user", content: transcript }
+              ]
+            });
+          }
+
+          if (!response.ok) {
+            throw new Error("llm failed");
+          }
+
+          const raw = await parseResponse(provider, response);
+          const cleaned = String(raw || "").trim().replace(/^```json\s*/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+          return JSON.parse(cleaned);
+        } catch (error) {
+          toast("нет сети, LLM недоступен");
+          return null;
+        }
+      }
+
+      async function interpret(transcript) {
+        const result = await request(transcript, null);
+        if (!result || !result.kind) {
+          return null;
+        }
+        return result;
+      }
+
+      async function extract(transcript, taskId) {
+        const result = await request(transcript, taskId);
+        if (!result || !result.kind) {
+          return null;
+        }
+        return result;
+      }
+
+      return {
+        interpret,
+        extract
+      };
+    })();
+
+    const extractModule = (() => {
+      async function handle(input) {
+        const transcript = normalizeText(input.transcript);
+        const taskId = input.taskId;
+        let patch = null;
+
+        if (/^удали\b/.test(transcript)) {
+          patch = { op: "delete", task: { id: taskId } };
+        } else if (/^в архив\b/.test(transcript)) {
+          patch = { op: "update", task: { id: taskId, status: "архив" } };
+        } else {
+          const renameMatch = transcript.match(/^(измени|переименуй)\s+(.+)/);
+          if (renameMatch && renameMatch[2]) {
+            patch = { op: "update", task: { id: taskId, title: renameMatch[2].trim() } };
+          }
+        }
+
+        if (!patch) {
+          const removeTagMatch = transcript.match(/^это не\s+(.+)/);
+          if (removeTagMatch && removeTagMatch[1]) {
+            const value = removeTagMatch[1].trim();
+            if (STATUSES.includes(value)) {
+              patch = { op: "update", task: { id: taskId, status: "сегодня" } };
+            } else {
+              patch = { op: "update", task: { id: taskId, _removeTags: [value] } };
+            }
+          }
+        }
+
+        if (!patch) {
+          const addTagMatch = transcript.match(/^добавь тег\s+(.+)/);
+          if (addTagMatch && addTagMatch[1]) {
+            patch = { op: "update", task: { id: taskId, tags: [addTagMatch[1].trim()] } };
+          }
+        }
+
+        if (!patch) {
+          const statusOrTagMatch = transcript.match(/^это\s+(.+)/);
+          if (statusOrTagMatch && statusOrTagMatch[1]) {
+            const value = statusOrTagMatch[1].trim();
+            if (STATUSES.includes(value)) {
+              patch = { op: "update", task: { id: taskId, status: value } };
+            } else {
+              patch = { op: "update", task: { id: taskId, tags: [value] } };
+            }
+          }
+        }
+
+        if (!patch) {
+          const aiResult = await cloudModule.extract(input.transcript, taskId);
+          if (aiResult && aiResult.kind === "patch") {
+            patch = aiResult.value;
+          }
+        }
+
+        if (!patch) {
+          toast("Команда не распознана");
+          return;
+        }
+
+        await logModule.emit("receive", "extract", input);
+        await logModule.emit("extract", "storage", patch);
+        const result = await storageModule.patch(patch);
+        if (!result.ok) {
+          toast(result.error || "Ошибка сохранения");
+          return;
+        }
+        renderTasks(window.__tasksCache);
+      }
+
+      return {
+        handle
+      };
+    })();
+
+    const searchModule = (() => {
+      async function handleTranscript(transcript) {
+        const normalized = normalizeText(transcript);
+        let routed = null;
+
+        const addMatch = normalized.match(/^(добавь|создай|новая задача)\s+(.+)/);
+        if (addMatch && addMatch[2]) {
+          routed = {
+            kind: "patch",
+            value: {
+              op: "add",
+              task: {
+                title: addMatch[2].trim()
+              }
+            }
+          };
+        }
+
+        if (!routed) {
+          const findMatch = normalized.match(/^най(ди|ти)?\s*(.*)/);
+          if (findMatch) {
+            const tail = String(findMatch[2] || "").trim();
+            const cleanedText = cleanupSearchText(tail);
+            routed = {
+              kind: "query",
+              value: {
+                text: cleanedText || undefined,
+                status: parseStatusFromText(tail),
+                tags: parseTagsFromText(tail)
+              }
+            };
+            if (!routed.value.text && !routed.value.status && !routed.value.tags.length) {
+              routed.value = {};
+            } else if (!routed.value.tags.length) {
+              delete routed.value.tags;
+            }
+          }
+        }
+
+        if (!routed) {
+          const aiResult = await cloudModule.interpret(transcript);
+          if (aiResult) {
+            routed = aiResult;
+          }
+        }
+
+        if (!routed) {
+          toast("Команда не распознана");
+          return;
+        }
+
+        if (routed.kind === "patch") {
+          await logModule.emit("search", "storage", routed.value);
+          const patchResult = await storageModule.patch(routed.value);
+          if (!patchResult.ok) {
+            toast(patchResult.error || "Ошибка сохранения");
+            return;
+          }
+          renderTasks(window.__tasksCache);
+          return;
+        }
+
+        if (routed.kind === "query") {
+          const query = routed.value || {};
+          await logModule.emit("search", "storage", query);
+          const queryResult = await storageModule.query(query);
+          if (!queryResult.ok) {
+            toast(queryResult.error || "Ошибка поиска");
+            return;
+          }
+          renderTasks(queryResult.tasks || []);
+          if (!queryResult.tasks || !queryResult.tasks.length) {
+            toast("Ничего не найдено");
+          }
+        }
+      }
+
+      return {
+        handleTranscript
+      };
+    })();
+
+    const receiveModule = (() => {
+      const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+      let recognition = null;
+      let activeSession = null;
+
+      function createRecognition() {
+        if (!SpeechRecognitionCtor) {
+          toast("SpeechRecognition недоступен");
+          return null;
+        }
+
+        const instance = new SpeechRecognitionCtor();
+        instance.lang = "ru-RU";
+        instance.interimResults = true;
+        instance.maxAlternatives = 1;
+        instance.continuous = false;
+        return instance;
+      }
+
+      function abortShortPress() {
+        if (!activeSession) {
+          return;
+        }
+        activeSession.shortPress = true;
+        if (recognition) {
+          try {
+            recognition.abort();
+          } catch (_error) {
+          }
+        }
+        hideOverlay();
+        flashElement(activeSession.element);
+        activeSession = null;
+      }
+
+      function finishPress() {
+        if (!activeSession) {
+          return;
+        }
+        activeSession.released = true;
+        if (recognition) {
+          try {
+            recognition.stop();
+          } catch (_error) {
+          }
+        }
+      }
+
+      function bindCommonHandlers(instance) {
+        instance.onresult = (event) => {
+          if (!activeSession) {
+            return;
+          }
+          let finalText = activeSession.transcript || "";
+          let interimText = "";
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const piece = event.results[i][0] && event.results[i][0].transcript ? event.results[i][0].transcript : "";
+            if (event.results[i].isFinal) {
+              finalText += piece + " ";
+            } else {
+              interimText += piece;
+            }
+          }
+          activeSession.transcript = (finalText + interimText).trim();
+          updateOverlayText(activeSession.transcript || "Запись…");
+        };
+
+        instance.onerror = () => {
+          hideOverlay();
+          if (activeSession && !activeSession.shortPress) {
+            toast("Ошибка распознавания");
+          }
+          activeSession = null;
+        };
+
+        instance.onend = async () => {
+          if (!activeSession) {
+            return;
+          }
+          const session = activeSession;
+          activeSession = null;
+          hideOverlay();
+
+          if (session.shortPress) {
+            return;
+          }
+
+          const transcript = String(session.transcript || "").trim();
+          if (!transcript) {
+            toast("Ничего не распознано");
+            return;
+          }
+
+          if (session.mode === "search") {
+            await searchModule.handleTranscript(transcript);
+            return;
+          }
+
+          if (session.mode === "task") {
+            await extractModule.handle({
+              elementType: "task",
+              taskId: session.taskId,
+              transcript
+            });
+            return;
+          }
+
+          if (session.mode === "log") {
+            await logModule.emit("receive", "log", {
+              elementType: "log",
+              taskId: null,
+              transcript,
+              logId: session.logId
+            });
+            await logModule.addVoiceComment(session.logId, transcript);
+          }
+        };
+      }
+
+      function startSession(meta) {
+        recognition = createRecognition();
+        if (!recognition) {
+          return;
+        }
+
+        activeSession = Object.assign({
+          transcript: "",
+          released: false,
+          shortPress: false
+        }, meta);
+
+        bindCommonHandlers(recognition);
+        showOverlay(meta.overlayTitle, "Запись…");
+
+        try {
+          recognition.start();
+        } catch (_error) {
+          hideOverlay();
+          toast("Не удалось запустить запись");
+          activeSession = null;
+          return;
+        }
+      }
+
+      function attachLongPress(element, metaFactory, shortTapHandler) {
+        let pressedAt = 0;
+
+        element.addEventListener("touchstart", (event) => {
+          event.preventDefault();
+          pressedAt = Date.now();
+          startSession(metaFactory(element));
+        }, { passive: false });
+
+        element.addEventListener("touchend", (event) => {
+          event.preventDefault();
+          const delta = Date.now() - pressedAt;
+          if (delta < 200) {
+            abortShortPress();
+            if (typeof shortTapHandler === "function") {
+              shortTapHandler(element);
+            }
+            return;
+          }
+          finishPress();
+        }, { passive: false });
+
+        element.addEventListener("touchcancel", () => {
+          abortShortPress();
+        }, { passive: false });
+      }
+
+      function bindTaskElement(element) {
+        attachLongPress(element, () => ({
+          mode: "task",
+          taskId: element.dataset.taskId,
+          element,
+          overlayTitle: "Команда для задачи"
+        }), flashElement);
+      }
+
+      function bindLogElement(element) {
+        attachLongPress(element, () => ({
+          mode: "log",
+          logId: element.dataset.logId,
+          element,
+          overlayTitle: "Комментарий к логу"
+        }), flashElement);
+      }
+
+      function bindSearchButton() {
+        attachLongPress(dom.btnPtt, () => ({
+          mode: "search",
+          element: dom.btnPtt,
+          overlayTitle: "Найти или добавить"
+        }));
+      }
+
+      return {
+        bindTaskElement,
+        bindLogElement,
+        bindSearchButton
+      };
+    })();
+
+    function renderTasks(tasks) {
+      const items = Array.isArray(tasks) ? tasks : [];
+      dom.taskList.innerHTML = items.map((task) => {
+        const tags = Array.isArray(task.tags) ? task.tags : [];
+        return [
+          '<li class="task-item" data-task-id="' + escapeHtml(task.id) + '" data-status="' + escapeHtml(task.status || "сегодня") + '">',
+          '  <div class="task-head">',
+          '    <div class="task-glyph">' + escapeHtml(STATUS_ICONS[task.status] || "•") + '</div>',
+          '    <div>',
+          '      <div class="task-title">' + escapeHtml(task.title) + '</div>',
+          '      <div class="task-meta">',
+          '        <span class="pill status">' + escapeHtml(STATUS_LABELS[task.status] || task.status || "Сегодня") + '</span>',
+          tags.map((tag) => '<span class="pill tag">#' + escapeHtml(tag) + '</span>').join(""),
+          '      </div>',
+          '    </div>',
+          '  </div>',
+          '</li>'
+        ].join("");
+      }).join("");
+      dom.taskEmpty.hidden = items.length > 0;
+      Array.from(dom.taskList.querySelectorAll("[data-task-id]")).forEach((element) => {
+        receiveModule.bindTaskElement(element);
+      });
+    }
+
+    function renderLogs(logs) {
+      const items = Array.isArray(logs) ? logs : [];
+      dom.logList.innerHTML = items.map((entry) => {
+        return [
+          '<li class="log-item" data-log-id="' + escapeHtml(entry.id) + '">',
+          '  <div class="log-head">',
+          '    <div class="log-glyph">↔</div>',
+          '    <div>',
+          '      <div class="log-route"><span>' + escapeHtml(entry.from) + '</span><span>→</span><span>' + escapeHtml(entry.to) + '</span></div>',
+          '      <div class="log-meta"><span class="pill">' + new Date(Number(entry.ts || Date.now())).toLocaleString("ru-RU") + '</span></div>',
+          '      <div class="log-data">' + escapeHtml(safeJson(entry.data)) + '</div>',
+          entry.comment ? '<div class="log-comment">' + escapeHtml(entry.comment) + '</div>' : "",
+          '    </div>',
+          '  </div>',
+          '</li>'
+        ].join("");
+      }).join("");
+      dom.logEmpty.hidden = items.length > 0;
+      Array.from(dom.logList.querySelectorAll("[data-log-id]")).forEach((element) => {
+        receiveModule.bindLogElement(element);
+      });
+    }
+
+    function showTasksPanel() {
+      dom.tabTasks.classList.add("active");
+      dom.tabLog.classList.remove("active");
+      dom.taskPanel.hidden = false;
+      dom.logPanel.hidden = true;
+    }
+
+    function showLogPanel() {
+      dom.tabLog.classList.add("active");
+      dom.tabTasks.classList.remove("active");
+      dom.logPanel.hidden = false;
+      dom.taskPanel.hidden = true;
+    }
+
+    const app = (() => {
+      async function loadAll() {
+        const queryResult = await storageModule.query({});
+        if (queryResult.ok) {
+          renderTasks(queryResult.tasks || []);
+        } else if (window.__cfg.qdrantUrl) {
+          toast("Не удалось загрузить задачи");
+        } else {
+          renderTasks(window.__tasksCache);
+        }
+
+        await logModule.load();
+      }
+
+      function bindUI() {
+        dom.btnSettings.addEventListener("click", settingsModule.openModal);
+        dom.btnCloseSettings.addEventListener("click", settingsModule.closeModal);
+        dom.btnSaveSettings.addEventListener("click", settingsModule.save);
+        dom.btnUndo.addEventListener("click", async () => {
+          await undoModule.restore();
+        });
+        dom.btnClearLog.addEventListener("click", async () => {
+          await logModule.clear();
+        });
+        dom.btnCopyLog.addEventListener("click", async () => {
+          await logModule.copy();
+        });
+        dom.tabTasks.addEventListener("click", showTasksPanel);
+        dom.tabLog.addEventListener("click", showLogPanel);
+        receiveModule.bindSearchButton();
+      }
+
+      async function init() {
+        bindUI();
+        settingsModule.init();
+        await loadAll();
+      }
+
+      return {
+        init,
+        loadAll
+      };
+    })();
+
+    app.init();
+  </script>
+</body>
+</html>
