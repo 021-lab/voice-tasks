@@ -352,11 +352,9 @@ const storageModule = (() => {
 
   async function query(q) {
     try {
-      const must = [];
-      if (q.status) must.push({ key: 'status', match: { value: q.status } });
-      if (q.tags) q.tags.forEach(tag => must.push({ key: 'tags', match: { value: tag } }));
-      const filter = must.length ? { must } : {};
-      let tasks = await QdrantBackend.scrollTasks(filter);
+      let tasks = await QdrantBackend.scrollTasks({});
+      if (q.status) tasks = tasks.filter(t => t.status === q.status);
+      if (q.tags) q.tags.forEach(tag => { tasks = tasks.filter(t => (t.tags || []).includes(tag)); });
       if (q.text) {
         const needle = q.text.toLowerCase();
         tasks = tasks.filter(t => t.title && t.title.toLowerCase().includes(needle));
