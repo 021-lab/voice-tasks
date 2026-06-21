@@ -678,6 +678,8 @@
       "отложено": "↺",
       "делегирована": "⇢"
     };
+    const TASKS_COLLECTION = "task-codex";
+    const LOG_COLLECTION = "log-codex";
 
     window.__cfg = {};
     window.__tasksCache = [];
@@ -1017,7 +1019,7 @@
       }
 
       function getStore(collection) {
-        if (collection === "tasks") {
+        if (collection === TASKS_COLLECTION) {
           return FALLBACK_STORE.tasks;
         }
         return FALLBACK_STORE.log;
@@ -1025,7 +1027,7 @@
 
       function applyFallbackFilter(collection, entries, filter) {
         if (!filter || !Array.isArray(filter.must) || !filter.must.length) {
-          return collection === "log" ? entries.reverse() : entries;
+          return collection === LOG_COLLECTION ? entries.reverse() : entries;
         }
 
         return entries.filter((entry) => {
@@ -1077,40 +1079,40 @@
       }
 
       async function getTask(id) {
-        await ensureCollection("tasks");
-        const response = await _req("GET", "/collections/tasks/points/" + encodeURIComponent(id));
+        await ensureCollection(TASKS_COLLECTION);
+        const response = await _req("GET", "/collections/" + TASKS_COLLECTION + "/points/" + encodeURIComponent(id));
         return response.result && response.result.payload ? response.result.payload : null;
       }
 
       async function upsertTask(task) {
-        await ensureCollection("tasks");
+        await ensureCollection(TASKS_COLLECTION);
         const payload = {
           id: task.id,
           title: task.title,
           status: task.status || "сегодня",
           tags: Array.isArray(task.tags) ? task.tags : []
         };
-        await _req("PUT", "/collections/tasks/points", {
+        await _req("PUT", "/collections/" + TASKS_COLLECTION + "/points", {
           points: [{ id: payload.id, vector: [0.0], payload }]
         });
         return payload;
       }
 
       async function deleteTask(id) {
-        await ensureCollection("tasks");
-        await _req("DELETE", "/collections/tasks/points/" + encodeURIComponent(id));
+        await ensureCollection(TASKS_COLLECTION);
+        await _req("DELETE", "/collections/" + TASKS_COLLECTION + "/points/" + encodeURIComponent(id));
         return true;
       }
 
       async function replaceAllTasks(tasks) {
-        await ensureCollection("tasks");
+        await ensureCollection(TASKS_COLLECTION);
         const current = await queryTasks({});
         const currentIds = current.map((task) => task.id);
         if (currentIds.length) {
-          await _req("POST", "/collections/tasks/points/delete", { points: currentIds });
+          await _req("POST", "/collections/" + TASKS_COLLECTION + "/points/delete", { points: currentIds });
         }
         if (tasks.length) {
-          await _req("PUT", "/collections/tasks/points", {
+          await _req("PUT", "/collections/" + TASKS_COLLECTION + "/points", {
             points: tasks.map((task) => ({
               id: task.id,
               vector: [0.0],
@@ -1127,8 +1129,8 @@
       }
 
       async function queryTasks(query) {
-        await ensureCollection("tasks");
-        const response = await _req("POST", "/collections/tasks/points/scroll", {
+        await ensureCollection(TASKS_COLLECTION);
+        const response = await _req("POST", "/collections/" + TASKS_COLLECTION + "/points/scroll", {
           limit: 200,
           with_payload: true,
           with_vector: false
@@ -1156,16 +1158,16 @@
       }
 
       async function saveLog(entry) {
-        await ensureCollection("log");
-        await _req("PUT", "/collections/log/points", {
+        await ensureCollection(LOG_COLLECTION);
+        await _req("PUT", "/collections/" + LOG_COLLECTION + "/points", {
           points: [{ id: entry.id, vector: [0.0], payload: entry }]
         });
         return entry;
       }
 
       async function getLogs() {
-        await ensureCollection("log");
-        const response = await _req("POST", "/collections/log/points/scroll", {
+        await ensureCollection(LOG_COLLECTION);
+        const response = await _req("POST", "/collections/" + LOG_COLLECTION + "/points/scroll", {
           limit: 300,
           with_payload: true,
           with_vector: false
@@ -1178,19 +1180,19 @@
       }
 
       async function clearLogs() {
-        await ensureCollection("log");
+        await ensureCollection(LOG_COLLECTION);
         const logs = await getLogs();
         if (!logs.length) {
           return true;
         }
-        await _req("POST", "/collections/log/points/delete", {
+        await _req("POST", "/collections/" + LOG_COLLECTION + "/points/delete", {
           points: logs.map((entry) => entry.id)
         });
         return true;
       }
 
       async function updateLogComment(id, comment) {
-        await ensureCollection("log");
+        await ensureCollection(LOG_COLLECTION);
         const logs = await getLogs();
         const current = logs.find((entry) => entry.id === id);
         if (!current) {
