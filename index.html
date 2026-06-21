@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0d0f14">
+<title>Голос · Задачи</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙️</text></svg>">
+<style>
+  :root{
+    --bg:#0d0f14; --surface:#161a22; --surface-2:#1e242f; --line:#262d3a;
+    --text:#e6e9ef; --muted:#7c8696; --accent:#5b8cff; --accent-soft:#5b8cff22;
+    --done:#3ddc97; --danger:#ff5d6c; --tag:#c792ea; --warn:#ffb454;
+    --r:14px; --r-sm:10px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg);color:var(--text);
+    font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    overscroll-behavior:none;user-select:none;-webkit-user-select:none;
+  }
+  #app{max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding:0 14px env(safe-area-inset-bottom,14px)}
+
+  /* header / search */
+  header{position:sticky;top:0;z-index:20;background:linear-gradient(var(--bg) 70%,transparent);padding:16px 0 10px}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:600;letter-spacing:.2px;margin-bottom:12px}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .brand .gear{margin-left:auto;color:var(--muted);font-size:20px;padding:6px;cursor:pointer;line-height:1}
+
+  .search{
+    display:flex;align-items:center;gap:10px;background:var(--surface);
+    border:1px solid var(--line);border-radius:var(--r);padding:12px 12px;
+    transition:border-color .2s,box-shadow .2s;position:relative;
+  }
+  .search.holding{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .search .mic{font-size:18px;opacity:.8}
+  .search input{
+    flex:1;background:none;border:none;outline:none;color:var(--text);font-size:15px;
+    user-select:text;-webkit-user-select:text;
+  }
+  .search input::placeholder{color:var(--muted)}
+  .search .hint{font-size:11px;color:var(--muted);white-space:nowrap}
+
+  /* nav chips */
+  .nav{display:flex;gap:8px;overflow-x:auto;padding:12px 0 4px;scrollbar-width:none}
+  .nav::-webkit-scrollbar{display:none}
+  .chip{
+    flex:0 0 auto;padding:7px 14px;border-radius:999px;background:var(--surface);
+    border:1px solid var(--line);color:var(--muted);font-size:13px;cursor:pointer;
+    transition:all .15s;position:relative;
+  }
+  .chip.active{color:var(--text);border-color:var(--accent);background:var(--accent-soft)}
+  .chip.holding{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+  /* list */
+  main{flex:1;padding-top:6px}
+  .meta{font-size:12px;color:var(--muted);padding:6px 2px 10px;display:flex;justify-content:space-between}
+  ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .item{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+    padding:13px 14px;display:flex;align-items:flex-start;gap:12px;cursor:pointer;
+    transition:border-color .15s,transform .05s,box-shadow .2s;position:relative;
+  }
+  .item:active{transform:scale(.992)}
+  .item.holding{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .item.done .title{color:var(--muted);text-decoration:line-through}
+  .box{
+    width:20px;height:20px;flex:0 0 auto;margin-top:1px;border-radius:6px;
+    border:2px solid var(--line);display:grid;place-items:center;transition:.15s;
+  }
+  .item.done .box{background:var(--done);border-color:var(--done)}
+  .box svg{width:12px;height:12px;opacity:0;transition:.15s}
+  .item.done .box svg{opacity:1}
+  .body{flex:1;min-width:0}
+  .title{word-wrap:break-word}
+  .status-doing .title::after{content:"";}
+  .badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+  .badge{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted)}
+  .badge.tag{color:var(--tag);background:#c792ea1a}
+  .badge.st{color:var(--warn);background:#ffb4541a}
+
+  .empty{text-align:center;color:var(--muted);padding:60px 20px;font-size:14px;line-height:1.7}
+  .empty .big{font-size:34px;margin-bottom:10px}
+
+  /* mic FAB / status */
+  .toast{
+    position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0));transform:translateX(-50%);
+    background:var(--surface-2);border:1px solid var(--line);color:var(--text);
+    padding:11px 18px;border-radius:999px;font-size:13px;z-index:50;
+    box-shadow:0 8px 30px #0008;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
+    max-width:90%;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{border-color:var(--danger);color:#ffd2d6}
+  .toast.ok{border-color:var(--done)}
+
+  .listening{
+    position:fixed;inset:0;z-index:40;background:#0d0f14ee;backdrop-filter:blur(4px);
+    display:none;align-items:center;justify-content:center;flex-direction:column;gap:24px;
+  }
+  .listening.show{display:flex}
+  .pulse{width:120px;height:120px;border-radius:50%;background:var(--accent);position:relative;display:grid;place-items:center;font-size:44px}
+  .pulse::before,.pulse::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--accent);opacity:.5;animation:pulse 1.8s ease-out infinite}
+  .pulse::after{animation-delay:.9s}
+  @keyframes pulse{to{transform:scale(2.2);opacity:0}}
+  .heard{color:var(--text);font-size:18px;text-align:center;padding:0 30px;min-height:24px;max-width:90%}
+  .ctx-label{color:var(--accent);font-size:13px}
+
+  /* settings modal */
+  .modal{position:fixed;inset:0;z-index:60;background:#0008;display:none;align-items:flex-end;justify-content:center}
+  .modal.show{display:flex}
+  .sheet{
+    background:var(--surface);width:100%;max-width:560px;border-radius:18px 18px 0 0;
+    border-top:1px solid var(--line);padding:20px 18px calc(24px + env(safe-area-inset-bottom,0));
+    animation:up .25s ease;max-height:90vh;overflow:auto;
+  }
+  @keyframes up{from{transform:translateY(100%)}}
+  .sheet h2{margin:0 0 4px;font-size:18px}
+  .sheet p.sub{margin:0 0 18px;color:var(--muted);font-size:13px}
+  label.fld{display:block;margin:14px 0 6px;font-size:13px;color:var(--muted)}
+  .seg{display:flex;gap:6px;background:var(--bg);padding:4px;border-radius:var(--r-sm);border:1px solid var(--line)}
+  .seg button{flex:1;padding:9px;border:none;background:none;color:var(--muted);border-radius:7px;font-size:13px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#fff}
+  input.txt{
+    width:100%;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-sm);
+    padding:12px;color:var(--text);font-size:14px;outline:none;user-select:text;-webkit-user-select:text;
+  }
+  input.txt:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px;margin-top:20px}
+  .btn{flex:1;padding:13px;border:none;border-radius:var(--r-sm);font-size:15px;font-weight:500;cursor:pointer}
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.ghost{background:var(--surface-2);color:var(--text)}
+  .note{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.6}
+
+  /* log panel */
+  #logPanel{display:none;flex:1;flex-direction:column;padding-top:6px}
+  #logPanel.show{display:flex}
+  #logList{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:20px}
+  .log-entry{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px;font-size:12px;font-family:monospace;line-height:1.5;word-break:break-all}
+  .log-entry .lt{color:var(--muted);font-size:10px;margin-bottom:3px}
+  .log-entry.ok .lt{color:var(--done)} .log-entry.err .lt{color:var(--danger)} .log-entry.warn .lt{color:var(--warn)} .log-entry.info .lt{color:var(--accent)}
+  .log-entry .lv{font-weight:600;margin-right:6px}
+  .log-entry.ok .lv{color:var(--done)} .log-entry.err .lv{color:var(--danger)} .log-entry.warn .lv{color:var(--warn)} .log-entry.info .lv{color:var(--accent)}
+  .log-clear{align-self:flex-end;background:none;border:1px solid var(--line);color:var(--muted);padding:6px 14px;border-radius:999px;font-size:12px;cursor:pointer;margin-bottom:8px}
+
+  /* tab bar */
+  .tabs{display:flex;gap:6px;padding:8px 0 2px}
+  .tab{flex:1;padding:9px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;text-align:center;transition:.15s}
+  .tab.active{border-color:var(--accent);color:var(--text);background:var(--accent-soft)}
+  .tab .badge-cnt{display:inline-block;background:var(--danger);color:#fff;font-size:10px;border-radius:999px;padding:1px 5px;margin-left:4px;vertical-align:middle}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <span class="dot"></span> Голос · Задачи
+      <span class="gear" id="openSettings">⚙</span>
+    </div>
+    <div class="search" id="searchEl" data-ctx="search">
+      <span class="mic">🔍</span>
+      <input id="searchInput" placeholder="Поиск или «добавь …»" autocomplete="off" enterkeyhint="search">
+      <span class="hint" id="searchHint">удержи + говори</span>
+    </div>
+    <div class="nav" id="nav"></div>
+    <div class="tabs">
+      <div class="tab active" id="tabTasks">Задачи</div>
+      <div class="tab" id="tabLog">Лог <span class="badge-cnt" id="errCnt" style="display:none">0</span></div>
+    </div>
+  </header>
+
+  <main id="mainPanel">
+    <div class="meta"><span id="viewLabel">Все</span><span id="countLabel"></span></div>
+    <ul id="list"></ul>
+    <div class="empty" id="empty" style="display:none">
+      <div class="big">🗒️</div>
+      Пусто. Удержи поиск и скажи «добавь …»<br>или просто введи текст.
+    </div>
+  </main>
+
+  <div id="logPanel">
+    <div style="display:flex;gap:8px">
+      <button class="log-clear" id="logClear">Очистить</button>
+      <button class="log-clear" id="logCopy">Скопировать</button>
+    </div>
+    <div id="logList"></div>
+  </div>
+</div>
+
+<!-- listening overlay -->
+<div class="listening" id="listening">
+  <div class="ctx-label" id="ctxLabel"></div>
+  <div class="pulse">🎙️</div>
+  <div class="heard" id="heard">Слушаю…</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- settings -->
+<div class="modal" id="modal">
+  <div class="sheet">
+    <h2>Облачная модель</h2>
+    <p class="sub">Используется как фолбэк, когда команда не распознана локально.</p>
+    <label class="fld">Провайдер</label>
+    <div class="seg" id="provSeg">
+      <button data-p="openrouter">OpenRouter</button>
+      <button data-p="anthropic">Anthropic</button>
+      <button data-p="openai">OpenAI</button>
+    </div>
+    <label class="fld">API-ключ</label>
+    <input class="txt" id="apiKey" type="password" placeholder="sk-…" autocomplete="off">
+    <label class="fld">Модель</label>
+    <input class="txt" id="model" placeholder="напр. anthropic/claude-3.5-sonnet" autocomplete="off">
+    <div class="row">
+      <button class="btn ghost" id="closeSettings">Отмена</button>
+      <button class="btn primary" id="saveSettings">Сохранить</button>
+    </div>
+    <div class="note">
+      Ключ хранится только в этом браузере (IndexedDB). Распознавание речи — нативный Web Speech API,
+      работает в Chrome/Safari (на iOS — только при открытом приложении).
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ГОЛОСОВОЙ МЕНЕДЖЕР ЗАДАЧ — single-file PWA-style app
+   Хранение: IndexedDB (нативно). Речь: Web Speech API.
+   Фолбэк: OpenRouter / Anthropic / OpenAI через fetch.
+   ============================================================ */
+
+/* ---------- IndexedDB (минимальная обёртка) ---------- */
+const DB = (() => {
+  let db;
+  const open = () => new Promise((res, rej) => {
+    const r = indexedDB.open('voice-tasks', 1);
+    r.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('tasks')) {
+        const s = d.createObjectStore('tasks', { keyPath:'id', autoIncrement:true });
+        s.createIndex('created','created');
+      }
+      if (!d.objectStoreNames.contains('settings')) d.createObjectStore('settings',{ keyPath:'k' });
+    };
+    r.onsuccess = e => { db = e.target.result; res(db); };
+    r.onerror = e => rej(e.target.error);
+  });
+  const tx = (store,mode) => db.transaction(store,mode).objectStore(store);
+  const req = r => new Promise((res,rej)=>{ r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+  return {
+    open,
+    all:        ()      => req(tx('tasks','readonly').getAll()),
+    add:        (t)     => req(tx('tasks','readwrite').add(t)),
+    put:        (t)     => req(tx('tasks','readwrite').put(t)),
+    get:        (id)    => req(tx('tasks','readonly').get(id)),
+    del:        (id)    => req(tx('tasks','readwrite').delete(id)),
+    getSetting: (k)     => req(tx('settings','readonly').get(k)),
+    setSetting: (k,v)   => req(tx('settings','readwrite').put({k,v})),
+  };
+})();
+
+/* ---------- Состояние приложения ---------- */
+const STATUSES = ['todo','doing','done'];
+const STATUS_RU = { todo:'к выполнению', doing:'в работе', done:'готово' };
+let tasks = [];
+let view = { type:'all', value:null, query:null }; // all | status | tag | search
+let settings = { provider:'openrouter', key:'', model:'' };
+
+/* ---------- DOM ---------- */
+const $ = s => document.querySelector(s);
+const listEl=$('#list'), emptyEl=$('#empty'), navEl=$('#nav');
+const searchEl=$('#searchEl'), searchInput=$('#searchInput');
+const viewLabel=$('#viewLabel'), countLabel=$('#countLabel');
+const listening=$('#listening'), heard=$('#heard'), ctxLabel=$('#ctxLabel');
+const toastEl=$('#toast');
+
+/* ============================================================
+   ЛОГ
+   ============================================================ */
+let errCount=0;
+const logListEl=$('#logList'), errCntEl=$('#errCnt');
+function log(level, label, data){
+  const entry=document.createElement('div');
+  entry.className='log-entry '+level;
+  const ts=new Date().toLocaleTimeString('ru-RU');
+  const dataStr = data!==undefined ? (typeof data==='string'?data:JSON.stringify(data,null,2)) : '';
+  const pre = dataStr ? '<pre style="margin:4px 0 0;white-space:pre-wrap;color:var(--muted)">'+escH(dataStr)+'</pre>' : '';
+  entry.innerHTML='<div class="lt">'+ts+'</div><div><span class="lv">'+level.toUpperCase()+'</span>'+escH(label)+pre+'</div>';
+  logListEl.prepend(entry);
+  if(level==='err'){ errCount++; errCntEl.textContent=errCount; errCntEl.style.display=''; }
+}
+function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* вкладки */
+const mainPanel=$('#mainPanel'), logPanel=$('#logPanel');
+$('#tabTasks').addEventListener('click',()=>{
+  $('#tabTasks').classList.add('active'); $('#tabLog').classList.remove('active');
+  mainPanel.style.display=''; logPanel.classList.remove('show');
+});
+$('#tabLog').addEventListener('click',()=>{
+  $('#tabLog').classList.add('active'); $('#tabTasks').classList.remove('active');
+  mainPanel.style.display='none'; logPanel.classList.add('show');
+  errCount=0; errCntEl.style.display='none';
+});
+$('#logClear').addEventListener('click',()=>{ logListEl.innerHTML=''; errCount=0; errCntEl.style.display='none'; });
+$('#logCopy').addEventListener('click',()=>{
+  const entries=[...logListEl.querySelectorAll('.log-entry')].reverse();
+  const txt=entries.map(e=>{
+    const t=e.querySelector('.lt')?.textContent||'';
+    const lv=e.querySelector('.lv')?.textContent||'';
+    const pre=e.querySelector('pre')?.textContent||'';
+    const rest=e.querySelector('div:last-child')?.childNodes;
+    let msg='';
+    if(rest) rest.forEach(n=>{ if(n.nodeType===3) msg+=n.textContent; });
+    return '['+t+'] '+lv+' '+msg.trim()+(pre?' | '+pre.trim():'');
+  }).join('\n');
+  navigator.clipboard.writeText(txt).then(()=>toast('Лог скопирован','ok')).catch(()=>{
+    // fallback для Safari
+    const ta=document.createElement('textarea');
+    ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); toast('Лог скопирован','ok');
+  });
+});
+
+/* ---------- Toast ---------- */
+let toastT;
+function toast(msg, kind=''){
+  toastEl.textContent = msg;
+  toastEl.className = 'toast show ' + kind;
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>toastEl.className='toast '+kind, 2600);
+}
+
+/* ============================================================
+   РЕНДЕР
+   ============================================================ */
+function visibleTasks(){
+  let t = [...tasks].sort((a,b)=>b.created-a.created);
+  if (view.type==='status') t = t.filter(x=>x.status===view.value);
+  else if (view.type==='tag') t = t.filter(x=>(x.tags||[]).includes(view.value));
+  else if (view.type==='search'){
+    const q = view.query.toLowerCase();
+    t = t.filter(x=> x.title.toLowerCase().includes(q) || (x.tags||[]).some(tg=>tg.includes(q)));
+  }
+  return t;
+}
+
+function render(){
+  // nav chips: статусы + все теги
+  const tags = [...new Set(tasks.flatMap(t=>t.tags||[]))];
+  const chips = [
+    {label:'Все', type:'all'},
+    {label:'К выполнению', type:'status', value:'todo'},
+    {label:'В работе', type:'status', value:'doing'},
+    {label:'Готово', type:'status', value:'done'},
+    ...tags.map(tg=>({label:'#'+tg, type:'tag', value:tg})),
+  ];
+  navEl.innerHTML='';
+  chips.forEach(c=>{
+    const el=document.createElement('div');
+    el.className='chip'+(view.type===c.type && view.value===(c.value??null)?' active':'');
+    el.textContent=c.label;
+    el.dataset.ctx='nav';
+    el.dataset.navType=c.type;
+    el.dataset.navValue=c.value??'';
+    el.addEventListener('click',()=>{ if(!wasHold){ view={type:c.type,value:c.value??null,query:null}; clearSearch(); render(); }});
+    attachHold(el, { kind:'nav', navType:c.type, navValue:c.value??null, label:c.label });
+    navEl.appendChild(el);
+  });
+
+  // label
+  viewLabel.textContent = view.type==='search' ? `Поиск: «${view.query}»`
+    : view.type==='tag' ? '#'+view.value
+    : view.type==='status' ? STATUS_RU[view.value][0].toUpperCase()+STATUS_RU[view.value].slice(1)
+    : 'Все';
+
+  const vis = visibleTasks();
+  countLabel.textContent = vis.length ? vis.length+' / '+tasks.length : '';
+
+  listEl.innerHTML='';
+  if (!vis.length){ emptyEl.style.display='block'; return; }
+  emptyEl.style.display='none';
+
+  vis.forEach(t=>{
+    const li=document.createElement('li');
+    li.className='item status-'+t.status+(t.status==='done'?' done':'');
+    li.dataset.id=t.id;
+    li.innerHTML=`
+      <div class="box"><svg viewBox="0 0 24 24" fill="none" stroke="#0d0f14" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></div>
+      <div class="body">
+        <div class="title"></div>
+        <div class="badges"></div>
+      </div>`;
+    li.querySelector('.title').textContent = t.title;
+    const badges = li.querySelector('.badges');
+    if (t.status!=='todo' && t.status!=='done'){
+      const b=document.createElement('span'); b.className='badge st'; b.textContent=STATUS_RU[t.status]; badges.appendChild(b);
+    }
+    (t.tags||[]).forEach(tg=>{ const b=document.createElement('span'); b.className='badge tag'; b.textContent='#'+tg; badges.appendChild(b); });
+
+    li.addEventListener('click',()=>{ if(!wasHold){ cycleStatus(t.id); }});
+    attachHold(li, { kind:'item', id:t.id, label:t.title });
+    listEl.appendChild(li);
+  });
+}
+
+/* ============================================================
+   ЖЕСТ press-and-speak
+   ============================================================ */
+let holdTimer=null, wasHold=false, activeCtx=null;
+const HOLD_MS=220;
+
+function attachHold(el, ctx){
+  const start=(e)=>{
+    wasHold=false;
+    holdTimer=setTimeout(()=>{
+      wasHold=true;
+      el.classList.add('holding');
+      activeCtx=ctx;
+      startListening(ctx);
+    },HOLD_MS);
+  };
+
+  el.addEventListener('touchstart',start,{passive:true});
+  el.addEventListener('mousedown',start);
+}
+
+/* search element hold */
+attachHold(searchEl,{kind:'search'});
+searchInput.addEventListener('keydown',e=>{ if(e.key==='Enter'){ handleText(searchInput.value.trim(),{kind:'search'}); }});
+searchInput.addEventListener('mousedown',e=>e.stopPropagation());
+searchInput.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+
+function clearSearch(){ searchInput.value=''; }
+
+/* ============================================================
+   РАСПОЗНАВАНИЕ РЕЧИ (Web Speech API)
+   ============================================================ */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog=null, finalTranscript='';
+
+function startListening(ctx){
+  if(!SR){ log('err','startListening: SR недоступен'); toast('Браузер не поддерживает распознавание речи','err'); wasHold=false; return; }
+  log('info','startListening вызван', JSON.stringify(ctx));
+  finalTranscript='';
+  ctxLabel.textContent = ctx.kind==='item' ? '→ '+truncate(ctx.label,40)
+    : ctx.kind==='nav' ? '→ '+ctx.label : 'Поиск / добавление';
+  heard.textContent='Слушаю…';
+  listening.classList.add('show');
+
+  recog=new SR();
+  recog.lang='ru-RU';
+  recog.interimResults=true;
+  recog.continuous=false; // Safari: false надёжнее
+  recog.maxAlternatives=1;
+
+  recog.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const r=e.results[i];
+      if(r.isFinal) finalTranscript+=r[0].transcript;
+      else interim+=r[0].transcript;
+    }
+    log('info','onresult','final:«'+finalTranscript+'» interim:«'+interim+'»');
+    heard.textContent=(finalTranscript+interim)||'Слушаю…';
+  };
+
+  recog.onerror=e=>{
+    log('err','recog.onerror: '+e.error);
+    if(e.error==='not-allowed') toast('Нет доступа к микрофону','err');
+    else if(e.error!=='no-speech') toast('Ошибка: '+e.error,'err');
+  };
+
+  // onend — единственное надёжное место на Safari где транскрипт уже готов
+  recog.onend=()=>{
+    log('info','recog.onend','transcript:«'+finalTranscript.trim()+'»');
+    finishListening();
+  };
+
+  try{ recog.start(); log('info','recog.start() OK'); }catch(e){ log('err','recog.start() failed',String(e)); }
+}
+
+function stopListening(){
+  log('info','stopListening: сигнал остановки');
+  document.querySelectorAll('.holding').forEach(e=>e.classList.remove('holding'));
+  if(recog){ try{ recog.stop(); }catch(e){ log('warn','recog.stop() err',String(e)); } }
+  // finishListening() вызовется из recog.onend
+}
+
+function finishListening(){
+  listening.classList.remove('show');
+  const text=finalTranscript.trim();
+  const ctx=activeCtx; activeCtx=null;
+  if(text){
+    log('info','Транскрипт',text);
+    log('info','Контекст',JSON.stringify(ctx));
+    handleText(text,ctx);
+  } else {
+    log('warn','Ничего не услышал — finalTranscript пустой');
+    toast('Ничего не услышал');
+  }
+}
+
+function truncate(s,n){ return s.length>n? s.slice(0,n-1)+'…':s; }
+
+/* ============================================================
+   ЛОКАЛЬНЫЙ ПАРСЕР КОМАНД
+   возвращает {action,...} | null
+   ============================================================ */
+function parseCommand(raw, ctx){
+  const t = raw.toLowerCase().trim().replace(/[.,!?;]+$/,'');
+  const hasCtxItem = ctx && ctx.kind==='item';
+
+  // global: показать всё / сброс
+  if(/^(покажи (всё|все)|сброс|сбрось|все задачи|очисти фильтр)$/.test(t))
+    return {action:'show_all'};
+
+  // добавить (контекст не важен)
+  // добавить — расширенный паттерн
+  m = t.match(/^(добавь|добавить|добавляй|добавь-ка|добавь пожалуйста|создай|создать|запиши|записать|напомни|поставь|поставить|внеси|внести|новая задача|новый пункт|новое задание)(\s+(задачу|задание|пункт|напоминание|дело|заметку|item|таску))?\s+(.+)/);
+  if(m) return {action:'add', title:cap(m[4])};
+
+  // найти
+  m = t.match(/^(найди|найти|поиск|покажи)\s+(.+)/);
+  if(m) return {action:'search', query:m[2]};
+
+  // === команды с контекстом элемента ===
+  if(hasCtxItem){
+    if(/^(удали|убери|удалить|удалить это|стереть)$/.test(t)) return {action:'delete', id:ctx.id};
+    if(/^(готово|выполнено|сделано|выполнен|завершить|заверши)$/.test(t)) return {action:'set_status', id:ctx.id, status:'done'};
+    if(/^(в работ[еу]|начал|начать|делаю|в процессе)$/.test(t)) return {action:'set_status', id:ctx.id, status:'doing'};
+    if(/^(не сделано|вернуть|сброс статуса|к выполнению|отмен[аи] выполнения)$/.test(t)) return {action:'set_status', id:ctx.id, status:'todo'};
+
+    m = t.match(/^статус\s+(.+)/);
+    if(m){ const st=matchStatus(m[1]); if(st) return {action:'set_status', id:ctx.id, status:st}; }
+
+    m = t.match(/^(тег|пометь|пометить|метка|добавь тег)\s+(.+)/);
+    if(m) return {action:'add_tag', id:ctx.id, tag:m[2].replace(/^#/,'').trim()};
+
+    m = t.match(/^(удали тег|убери тег|сними тег)\s+(.+)/);
+    if(m) return {action:'remove_tag', id:ctx.id, tag:m[2].replace(/^#/,'').trim()};
+
+    m = t.match(/^(переименуй|измени на|замени на|переименовать в|назови)\s+(.+)/);
+    if(m) return {action:'rename', id:ctx.id, title:cap(m[2])};
+  }
+
+  // === команды над списком (контекст nav/search) ===
+  m = t.match(/^(удали тег|убери тег)\s+(.+)/);
+  if(m) return {action:'remove_tag_all', tag:m[2].replace(/^#/,'').trim()};
+
+  log('warn', 'Парсер: нет совпадения', t);
+  return null; // → фолбэк в облако
+}
+
+function matchStatus(s){
+  s=s.trim();
+  if(/готов|выполн|сделан|заверш/.test(s)) return 'done';
+  if(/работ|процесс|делаю/.test(s)) return 'doing';
+  if(/выполнен|todo|сделать|план/.test(s)) return 'todo';
+  return null;
+}
+function cap(s){ s=s.trim(); return s.charAt(0).toUpperCase()+s.slice(1); }
+
+/* ============================================================
+   ОБРАБОТКА ТЕКСТА: парс → исполнение | фолбэк
+   ============================================================ */
+async function handleText(text, ctx){
+  if(!text) return;
+  // если текст набран в поле поиска вручную и не команда — это поиск
+  const cmd = parseCommand(text, ctx);
+  if(cmd){ log('ok', 'Парсер: команда', cmd); await execute(cmd); return; }
+
+  // фолбэк: поле поиска без явной команды → просто поиск
+  if(ctx && ctx.kind==='search' && document.activeElement===searchInput){
+    await execute({action:'search', query:text}); return;
+  }
+
+  // облачный фолбэк
+  await cloudFallback(text, ctx);
+}
+
+/* ============================================================
+   ИСПОЛНИТЕЛЬ
+   ============================================================ */
+async function execute(cmd){
+  switch(cmd.action){
+    case 'add':{
+      const id=await DB.add({title:cmd.title, status:'todo', tags:cmd.tags||[], created:Date.now()});
+      log('ok','Добавлена задача', {id, title:cmd.title});
+      await refresh(); toast('Добавлено: '+truncate(cmd.title,30),'ok'); break;
+    }
+    case 'delete':{
+      const t=await DB.get(cmd.id); await DB.del(cmd.id); await refresh();
+      toast('Удалено'+(t?': '+truncate(t.title,24):''),'ok'); break;
+    }
+    case 'set_status':{
+      const t=await DB.get(cmd.id); if(!t)break; t.status=cmd.status; await DB.put(t); await refresh();
+      toast('Статус → '+STATUS_RU[cmd.status],'ok'); break;
+    }
+    case 'add_tag':{
+      const t=await DB.get(cmd.id); if(!t)break; t.tags=t.tags||[];
+      if(!t.tags.includes(cmd.tag)) t.tags.push(cmd.tag);
+      await DB.put(t); await refresh(); toast('Тег #'+cmd.tag,'ok'); break;
+    }
+    case 'remove_tag':{
+      const t=await DB.get(cmd.id); if(!t)break; t.tags=(t.tags||[]).filter(x=>x!==cmd.tag);
+      await DB.put(t); await refresh(); toast('Тег снят','ok'); break;
+    }
+    case 'remove_tag_all':{
+      let n=0; for(const t of tasks){ if((t.tags||[]).includes(cmd.tag)){ t.tags=t.tags.filter(x=>x!==cmd.tag); await DB.put(t); n++; }}
+      await refresh(); toast(`Тег #${cmd.tag} снят с ${n}`,'ok'); break;
+    }
+    case 'rename':{
+      const t=await DB.get(cmd.id); if(!t)break; t.title=cmd.title; await DB.put(t); await refresh();
+      toast('Переименовано','ok'); break;
+    }
+    case 'search':{
+      view={type:'search',value:null,query:cmd.query}; searchInput.value=cmd.query; render();
+      toast('Поиск: '+cmd.query); break;
+    }
+    case 'show_all':{
+      view={type:'all',value:null,query:null}; clearSearch(); render(); break;
+    }
+    case 'set_view_status':{ view={type:'status',value:cmd.status,query:null}; render(); break; }
+    case 'set_view_tag':{ view={type:'tag',value:cmd.tag,query:null}; render(); break; }
+    default: toast('Неизвестная команда','err');
+  }
+}
+
+/* быстрый тап по задаче — цикл статусов */
+async function cycleStatus(id){
+  const t=await DB.get(id); if(!t)return;
+  const i=STATUSES.indexOf(t.status);
+  t.status=STATUSES[(i+1)%STATUSES.length];
+  await DB.put(t); await refresh();
+}
+
+/* ============================================================
+   ОБЛАЧНЫЙ ФОЛБЭК
+   ============================================================ */
+const SCHEMA_PROMPT = `Ты — парсер голосовых команд для менеджера задач. Верни СТРОГО один JSON-объект, без markdown, без пояснений.
+Допустимые формы:
+{"action":"add","title":"текст"}
+{"action":"delete","id":ЧИСЛО}
+{"action":"set_status","id":ЧИСЛО,"status":"todo|doing|done"}
+{"action":"add_tag","id":ЧИСЛО,"tag":"строка"}
+{"action":"remove_tag","id":ЧИСЛО,"tag":"строка"}
+{"action":"rename","id":ЧИСЛО,"title":"текст"}
+{"action":"search","query":"строка"}
+{"action":"show_all"}
+{"action":"set_view_status","status":"todo|doing|done"}
+{"action":"set_view_tag","tag":"строка"}
+Если есть activeId — команда относится к этой задаче. Возвращай ровно ОДНУ команду.`;
+
+async function cloudFallback(text, ctx){
+  if(!settings.key){ log('err','Фолбэк: нет API-ключа',text); toast('Команда не распознана. Задайте ключ в ⚙','err'); return; }
+  toast('Думаю…');
+  log('info','Фолбэк → облако',{provider:settings.provider, text, activeId});
+  const activeId = ctx && ctx.kind==='item' ? ctx.id : null;
+  const payload = {
+    transcript: text,
+    activeId,
+    tasks: tasks.map(t=>({id:t.id,title:t.title,status:t.status,tags:t.tags||[]}))
+  };
+  const userMsg = SCHEMA_PROMPT+'\n\nКонтекст:\n'+JSON.stringify(payload);
+
+  try{
+    const cmd = await callProvider(userMsg);
+    log('ok','Облако ответило', cmd);
+    if(cmd && cmd.action){
+      if(activeId && cmd.id==null && ['delete','set_status','add_tag','remove_tag','rename'].includes(cmd.action))
+        cmd.id=activeId;
+      await execute(cmd);
+    } else toast('Модель не вернула команду','err');
+  }catch(e){
+    log('err','Облако: ошибка', e.message||String(e));
+    toast('Сеть/ключ: '+(e.message||'ошибка'),'err');
+  }
+}
+
+async function callProvider(userMsg){
+  const {provider,key,model}=settings;
+  let url,headers,body;
+
+  if(provider==='anthropic'){
+    url='https://api.anthropic.com/v1/messages';
+    headers={'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
+    body={model:model||'claude-3-5-sonnet-latest',max_tokens:300,messages:[{role:'user',content:userMsg}]};
+  } else if(provider==='openai'){
+    url='https://api.openai.com/v1/chat/completions';
+    headers={'content-type':'application/json','authorization':'Bearer '+key};
+    body={model:model||'gpt-4o-mini',max_tokens:300,messages:[{role:'user',content:userMsg}]};
+  } else { // openrouter
+    url='https://openrouter.ai/api/v1/chat/completions';
+    headers={'content-type':'application/json','authorization':'Bearer '+key};
+    body={model:model||'anthropic/claude-3.5-sonnet',max_tokens:300,messages:[{role:'user',content:userMsg}]};
+  }
+
+  const r=await fetch(url,{method:'POST',headers,body:JSON.stringify(body)});
+  if(!r.ok){ throw new Error('HTTP '+r.status); }
+  const data=await r.json();
+  let txt = provider==='anthropic'
+    ? (data.content?.map(c=>c.text||'').join('')||'')
+    : (data.choices?.[0]?.message?.content||'');
+  txt = txt.replace(/```json|```/g,'').trim();
+  const s=txt.indexOf('{'), e=txt.lastIndexOf('}');
+  if(s>=0&&e>=0) txt=txt.slice(s,e+1);
+  return JSON.parse(txt);
+}
+
+/* ============================================================
+   НАСТРОЙКИ
+   ============================================================ */
+const modal=$('#modal');
+$('#openSettings').addEventListener('click',()=>{
+  $('#apiKey').value=settings.key||'';
+  $('#model').value=settings.model||'';
+  setProvSeg(settings.provider);
+  modal.classList.add('show');
+});
+$('#closeSettings').addEventListener('click',()=>modal.classList.remove('show'));
+modal.addEventListener('click',e=>{ if(e.target===modal) modal.classList.remove('show'); });
+$('#provSeg').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setProvSeg(b.dataset.p); });
+function setProvSeg(p){ document.querySelectorAll('#provSeg button').forEach(b=>b.classList.toggle('on',b.dataset.p===p)); settings.provider=p; }
+$('#saveSettings').addEventListener('click',async()=>{
+  settings.key=$('#apiKey').value.trim();
+  settings.model=$('#model').value.trim();
+  await DB.setSetting('cloud',{...settings});
+  modal.classList.remove('show');
+  toast('Настройки сохранены','ok');
+});
+
+/* ============================================================
+   ИНИЦИАЛИЗАЦИЯ
+   ============================================================ */
+async function refresh(){ tasks=await DB.all(); render(); }
+
+async function init(){
+  await DB.open();
+  // persist storage — данные переживают месяцы
+  if(navigator.storage && navigator.storage.persist){
+    try{ const granted=await navigator.storage.persist(); log('info','storage.persist()',granted?'granted':'denied'); }catch(e){ log('warn','storage.persist failed',String(e)); }
+  }
+  const saved=await DB.getSetting('cloud');
+  if(saved&&saved.v) settings={...settings,...saved.v};
+  await refresh();
+  if(!SR){ log('err','Web Speech API недоступен в этом браузере'); toast('Нет Web Speech API — голос недоступен в этом браузере','err'); }
+  else { log('info','Web Speech API','доступен'); }
+}
+init();
+
+/* глобальный обработчик окончания жеста — надёжнее на iOS Safari */
+document.addEventListener('touchend', globalEnd, {passive:true});
+document.addEventListener('touchcancel', globalEnd, {passive:true});
+document.addEventListener('mouseup', globalEnd);
+
+function globalEnd(e){
+  if(!wasHold){ clearTimeout(holdTimer); return; }
+  // убираем holding со всех элементов
+  document.querySelectorAll('.holding').forEach(el=>el.classList.remove('holding'));
+  stopListening();
+}
+
+/* запрет зума двойным тапом на iOS */
+let lastTap=0;
+document.addEventListener('touchstart',e=>{ const n=Date.now(); if(n-lastTap<300) e.preventDefault(); lastTap=n; },{passive:false});
+</script>
+</body>
+</html>
