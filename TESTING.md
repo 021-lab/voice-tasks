@@ -2,6 +2,17 @@
 
 Один последовательный сценарий покрывает все модули и все операции, включая персистентность.
 
+## Режимы тестирования
+
+| Режим | Охват | Инструмент |
+|---|---|---|
+| Автоматический | Шаги 1–31, 35–38 | Playwright (мок Speech + мок Qdrant) |
+| Ручной | Шаги 32–34 | iOS Safari + реальный Qdrant Cloud |
+
+Запуск авто-тестов: `npm ci && npx playwright install chromium && npx playwright test`
+
+---
+
 ## Предусловия
 
 - `localStorage['vt_env']` не установлен — при открытии появится форма ввода
@@ -70,7 +81,7 @@
 30. **Проверить:** `payload.comment === 'это была проверка'` в Qdrant `log`
 31. **Проверить:** текст комментария виден в интерфейсе
 
-## Шаг 10 — Персистентность (Qdrant Cloud)
+## Шаг 10 — Персистентность (Qdrant Cloud) — только ручной тест
 
 32. Перезагрузить страницу (`.env` в localStorage — ввод не нужен)
 33. **Проверить:** обе задачи подгружаются с правильными данными
@@ -88,16 +99,16 @@
 
 ## Матрица покрытия
 
-| Функция | Шаги |
-|---|---|
-| `settingsModule` — ввод `.env`, сохранение в localStorage | 1–4 |
-| `searchModule` + `Patch{op:'add'}` | 5–8 |
-| `receiveModule` + `Patch{op:'update', status}` | 9–12 |
-| `storageModule` — merge тегов | 13–14 |
-| `storageModule` — `_removeTags` | 15–17 |
-| `undoModule` — восстановление снапшота | 18–20 |
-| `extractModule` — «это не [статус]» → дефолт | 21–22 |
-| `storageModule.query(SearchQuery)` | 23–27 |
-| `logModule` — голосовой комментарий | 28–31 |
-| Qdrant персистентность (reload без ввода) | 32–34 |
-| Сетевые ошибки / cloud fallback | 35–39 |
+| Функция | Шаги | Режим |
+|---|---|---|
+| `settingsModule` — ввод `.env`, сохранение в localStorage | 1–4 | авто |
+| `searchModule` + `Patch{op:'add'}` | 5–8 | авто |
+| `receiveModule` + `Patch{op:'update', status}` | 9–12 | авто |
+| `storageModule` — merge тегов | 13–14 | авто |
+| `storageModule` — `_removeTags` | 15–17 | авто |
+| `undoModule` — восстановление снапшота | 18–20 | авто |
+| `extractModule` — «это не [статус]» → дефолт | 21–22 | авто |
+| `storageModule.query(SearchQuery)` | 23–27 | авто |
+| `logModule` — голосовой комментарий | 28–31 | авто |
+| Qdrant персистентность (reload без ввода) | 32–34 | **ручной** |
+| Сетевые ошибки / cloud fallback | 35–39 | авто |

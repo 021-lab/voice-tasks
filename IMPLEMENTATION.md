@@ -125,7 +125,7 @@
   - вызывать перед каждым `Storage.patch()`
 - [ ] 9.2 Кнопка «Undo» (`touchend` < 200ms):
   - [ ] 9.2.1 Если снапшот есть → for each task upsert в Qdrant (полная перезапись)
-  - [ ] 9.2.2 `LOG.emit('undo', 'storage', { restored: snapshot })` 
+  - [ ] 9.2.2 `LOG.emit('undo', 'storage', { restored: snapshot })`
   - [ ] 9.2.3 render(snapshot); `window.__undoSnapshot = null`
   - [ ] 9.2.4 Если снапшота нет → toast «Нечего отменять»
 
@@ -151,3 +151,57 @@
 - [ ] 11.3 Открыть `https://021-lab.github.io/voice-tasks/` на iPhone Safari
 - [ ] 11.4 Пройти сценарий из `TESTING.md`
 - [ ] 11.5 «Поделиться» → «На экран Home» → убедиться что открывается без адресной строки
+
+---
+
+## 12. Автотесты (Playwright)
+
+- [ ] 12.1 `package.json` → `{ "devDependencies": { "@playwright/test": "^1.45", "serve": "^14" } }`
+- [ ] 12.2 `playwright.config.js`:
+  - `testDir: './tests/specs'`
+  - `use: { baseURL: 'http://localhost:3000' }`
+  - `webServer: { command: 'npx serve . -p 3000', url: 'http://localhost:3000' }`
+- [ ] 12.3 `tests/helpers/speech-mock.js` — скрипт для `page.addInitScript()`:
+  - Заменяет `window.SpeechRecognition` / `window.webkitSpeechRecognition` на фейковый класс
+  - `window.__nextTranscript = ''` — тест устанавливает значение перед PTT-жестом
+  - `start()` → через 30ms вызывает `onresult` с `__nextTranscript`, затем `onend`
+  - `abort()` / `stop()` → через 10ms вызывает `onend`
+- [ ] 12.4 `tests/helpers/qdrant-mock.js` — `installQdrantMock(page)`:
+  - `page.route('**/*.qdrant.io/**', handler)` — in-memory `Map` для каждой коллекции
+  - Обрабатывает: PUT collections, PUT points (upsert), POST scroll, POST delete, GET point
+  - Возвращает `store` — тест может инспектировать `store.tasks` / `store.log` напрямую
+- [ ] 12.5 `tests/helpers/setup.js` — `setupPage(page)`:
+  - `page.addInitScript(SPEECH_MOCK)` перед загрузкой
+  - `installQdrantMock(page)` — перехват fetch
+  - `page.addInitScript(env => localStorage.setItem('vt_env', env), envStr)` — пропустить модалку
+  - `page.goto('/')` → `waitForLoadState('networkidle')`
+  - Возвращает `store` (ref на in-memory хранилище мока)
+- [ ] 12.6 Спек-файлы (каждый вызывает `setupPage` в `beforeEach`):
+  - `01-settings.spec.js` — при отсутствии `vt_env` открывается модалка; сохранение заполняет `window.__cfg`
+  - `02-add-task.spec.js` — PTT «добавь X» → задача в DOM + `store.tasks` содержит 1 запись со `status:'сегодня'`
+  - `03-status-update.spec.js` — «это фокус» → `data-status='фокус'` в DOM + `store.tasks` обновлён; «это не фокус» → `status:'сегодня'`
+  - `04-tags.spec.js` — «добавь тег здоровье» → `tags:['здоровье']`; «это не здоровье» → `tags:[]`; лог содержит `_removeTags`
+  - `05-undo.spec.js` — после удаления тега Undo восстанавливает предыдущий `store.tasks`
+  - `06-search.spec.js` — «найди сделанные» → DOM показывает только задачи со `status:'сделано'`
+  - `07-log-comment.spec.js` — PTT на записи лога → `store.log` содержит `comment`
+- [ ] 12.7 `.github/workflows/test.yml`:
+  ```yaml
+  name: E2E Tests
+  on: [push, pull_request]
+  jobs:
+    test:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+          with: { ref: claude/voice-task-list-pwa-gpqcvk }
+        - uses: actions/setup-node@v4
+          with: { node-version: 20 }
+        - run: npm ci
+        - run: npx playwright install chromium
+        - run: npx playwright test
+  ```
+
+> **Примечание по тестируемости кода:** модули `index.html` не требуют изменений для тестирования, при условии что:
+> - `SpeechRecognition` используется как `window.SpeechRecognition || window.webkitSpeechRecognition` (заменяется моком через `addInitScript`)
+> - `QdrantBackend._req()` использует нативный `fetch` (перехватывается через `page.route`)
+> - `window.__cfg` читается из `localStorage` при старте (устанавливается в `setup.js`)
