@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0f0e17">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VoiceTasks">
+  <title>VoiceTasks</title>
+  <style>
+    :root {
+      --bg: #0f0e17;
+      --surface: #1a1a2e;
+      --card: #16213e;
+      --accent: #533483;
+      --accent2: #e84393;
+      --done: #4ade80;
+      --danger: #f87171;
+      --tag: #818cf8;
+      --warn: #fbbf24;
+      --orange: #fb923c;
+      --pink: #ec4899;
+      --text: #fffffe;
+      --muted: #94a3b8;
+      --border: rgba(255,255,255,0.08);
+    }
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+    header{background:var(--surface);padding:10px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+    .brand{font-size:16px;font-weight:700;flex:1;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .btn{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;white-space:nowrap;touch-action:manipulation;font-family:inherit;transition:background .15s;-webkit-appearance:none;appearance:none}
+    .btn:active{background:var(--accent)}
+    #btn-ptt{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;font-weight:600;flex:1;max-width:160px;user-select:none;-webkit-user-select:none}
+    nav{display:flex;background:var(--surface);border-bottom:1px solid var(--border)}
+    .tab-btn{flex:1;padding:9px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit;transition:color .15s}
+    .tab-btn.active{color:var(--text);border-bottom-color:var(--accent2)}
+    main{flex:1;overflow-y:auto;padding-bottom:60px}
+    #task-panel,#log-panel{padding:10px}
+    .task-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px;margin-bottom:9px;cursor:pointer;border-left:3px solid var(--accent);transition:background .15s;user-select:none;-webkit-user-select:none}
+    .task-item[data-status="фокус"]{border-left-color:var(--warn)}
+    .task-item[data-status="жду"]{border-left-color:var(--tag)}
+    .task-item[data-status="архив"]{border-left-color:var(--muted);opacity:.6}
+    .task-item[data-status="сделано"]{border-left-color:var(--done);opacity:.75}
+    .task-item[data-status="отложено"]{border-left-color:var(--orange)}
+    .task-item[data-status="делегирована"]{border-left-color:var(--pink)}
+    .task-item.flash{background:rgba(83,52,131,.5)}
+    .task-title{font-size:14px;font-weight:500;margin-bottom:6px;line-height:1.4}
+    .task-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+    .status-badge{font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.08);color:var(--muted)}
+    .tag-pill{font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(129,140,248,.15);color:var(--tag)}
+    .log-entry{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;user-select:none;-webkit-user-select:none}
+    .log-entry.flash{background:rgba(83,52,131,.5)}
+    .log-ft{color:var(--accent2);font-weight:600;font-size:11px;display:block;margin-bottom:3px}
+    .log-data{color:var(--muted);font-family:monospace;font-size:10px;word-break:break-all;display:block;line-height:1.5}
+    .log-comment{color:var(--warn);display:block;margin-top:4px;font-size:11px;font-style:italic}
+    .log-actions{display:flex;gap:8px;margin-bottom:10px}
+    #empty-state{text-align:center;color:var(--muted);padding:48px 20px;font-size:14px;line-height:1.6}
+    /* PTT Overlay */
+    #ptt-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;touch-action:none}
+    #ptt-overlay[hidden]{display:none!important}
+    #ptt-mic{font-size:60px;animation:pulse 1s infinite}
+    @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.15);opacity:.65}}
+    #ptt-label{color:var(--muted);font-size:12px;margin-top:8px;text-transform:uppercase;letter-spacing:.08em}
+    #ptt-transcript{color:var(--text);margin-top:16px;font-size:16px;text-align:center;padding:0 24px;max-width:320px;min-height:24px}
+    /* Toast */
+    #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);color:var(--text);padding:9px 18px;border-radius:20px;font-size:13px;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:80vw;text-align:center;pointer-events:none}
+    #toast[hidden]{display:none!important}
+    /* Settings Modal */
+    #settings-modal{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:150}
+    #settings-modal[hidden]{display:none!important}
+    #settings-dialog{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;width:min(92vw,400px)}
+    #settings-dialog h2{font-size:17px;margin-bottom:5px}
+    #settings-dialog p{font-size:12px;color:var(--muted);margin-bottom:12px}
+    #settings-textarea{width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:monospace;font-size:12px;resize:vertical;margin-bottom:12px;outline:none;line-height:1.5}
+    .dialog-btns{display:flex;gap:8px;justify-content:flex-end}
+    #btn-save-settings{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff;font-weight:600}
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="brand">🎙 VoiceTasks</span>
+  <button class="btn" id="btn-undo" title="Отменить">↩ Undo</button>
+  <button class="btn" id="btn-ptt">🎤 Найди/Добавь</button>
+  <button class="btn" id="btn-settings">⚙</button>
+</header>
+
+<nav>
+  <button class="tab-btn active" id="tab-tasks">Задачи</button>
+  <button class="tab-btn" id="tab-log">Лог</button>
+</nav>
+
+<main>
+  <div id="task-panel">
+    <ul id="task-list" style="list-style:none"></ul>
+    <div id="empty-state">Нет задач.<br>Долгое нажатие на «Найди/Добавь» — создать задачу.</div>
+  </div>
+  <div id="log-panel" hidden>
+    <div class="log-actions">
+      <button class="btn" id="btn-clear-log">Очистить лог</button>
+      <button class="btn" id="btn-copy-log">Копировать</button>
+    </div>
+    <ul id="log-list" style="list-style:none"></ul>
+  </div>
+</main>
+
+<div id="ptt-overlay" hidden>
+  <div id="ptt-mic">🎙</div>
+  <div id="ptt-label">Запись</div>
+  <div id="ptt-transcript"></div>
+</div>
+
+<div id="toast" hidden></div>
+
+<div id="settings-modal" hidden>
+  <div id="settings-dialog">
+    <h2>⚙ Настройки</h2>
+    <p>Вставьте .env текст и нажмите «Сохранить»:</p>
+    <textarea id="settings-textarea" rows="8" autocomplete="off" autocorrect="off" spellcheck="false"
+      placeholder="QDRANT_URL=https://xxx.qdrant.io&#10;QDRANT_KEY=abc123&#10;LLM_PROVIDER=openrouter&#10;LLM_KEY=sk-or-...&#10;LLM_MODEL=anthropic/claude-haiku-4-5-20251001"></textarea>
+    <div class="dialog-btns">
+      <button class="btn" id="btn-close-settings">Отмена</button>
+      <button class="btn" id="btn-save-settings">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ─── Globals ──────────────────────────────────────────────────────────────────
+window.__cfg = {};
+window.__tasksCache = [];
+window.__logCache = [];
+window.__undoSnapshot = null;
+
+const STATUSES = ['сегодня','фокус','жду','архив','сделано','отложено','делегирована'];
+const STATUS_ICON = {
+  'сегодня':'📋','фокус':'🎯','жду':'⏳','архив':'📦',
+  'сделано':'✅','отложено':'⏸','делегирована':'👤'
+};
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+function toast(msg, ms = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { el.hidden = true; }, ms);
+}
+
+function showOverlay(text) {
+  document.getElementById('ptt-transcript').textContent = text || '';
+  document.getElementById('ptt-overlay').hidden = false;
+}
+
+function hideOverlay() {
+  document.getElementById('ptt-overlay').hidden = true;
+  document.getElementById('ptt-transcript').textContent = '';
+}
+
+function setOverlayText(t) {
+  if (t) document.getElementById('ptt-transcript').textContent = t;
+}
+
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── settingsModule ───────────────────────────────────────────────────────────
+const settingsModule = (() => {
+  function parseEnv(raw) {
+    const cfg = {};
+    const map = { QDRANT_URL:'qdrantUrl', QDRANT_KEY:'qdrantKey',
+      LLM_PROVIDER:'llmProvider', LLM_KEY:'llmKey', LLM_MODEL:'llmModel' };
+    (raw || '').split('\n').forEach(line => {
+      const i = line.indexOf('=');
+      if (i < 1) return;
+      const k = line.slice(0, i).trim();
+      const v = line.slice(i + 1).trim();
+      if (map[k] && v) cfg[map[k]] = v;
+    });
+    return cfg;
+  }
+
+  function init() {
+    const raw = localStorage.getItem('vt_env') || '';
+    if (!raw.trim()) { openModal(); return; }
+    window.__cfg = parseEnv(raw);
+  }
+
+  function openModal() {
+    document.getElementById('settings-textarea').value = localStorage.getItem('vt_env') || '';
+    document.getElementById('settings-modal').hidden = false;
+  }
+
+  function closeModal() {
+    document.getElementById('settings-modal').hidden = true;
+  }
+
+  function save() {
+    const raw = document.getElementById('settings-textarea').value.trim();
+    localStorage.setItem('vt_env', raw);
+    window.__cfg = parseEnv(raw);
+    closeModal();
+    toast('Настройки сохранены');
+    appInit();
+  }
+
+  return { init, openModal, closeModal, save };
+})();
+
+// ─── QdrantBackend ────────────────────────────────────────────────────────────
+const QdrantBackend = (() => {
+  const _exists = new Set();
+
+  async function _req(method, path, body) {
+    const cfg = window.__cfg || {};
+    if (!cfg.qdrantUrl) throw Object.assign(new Error('QDRANT_URL не настроен'), { status: 0 });
+    const url = cfg.qdrantUrl.replace(/\/$/, '') + path;
+    const opts = {
+      method,
+      headers: { 'Content-Type': 'application/json', 'api-key': cfg.qdrantKey || '' }
+    };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    const res = await fetch(url, opts);
+    if (!res.ok) {
+      const err = Object.assign(new Error(`${method} ${path}: ${res.status}`), { status: res.status });
+      throw err;
+    }
+    return res.json().catch(() => ({}));
+  }
+
+  async function ensureCollection(name) {
+    if (_exists.has(name)) return;
+    try {
+      await _req('GET', `/collections/${name}`);
+      _exists.add(name);
+    } catch (e) {
+      if (e.status === 404) {
+        await _req('PUT', `/collections/${name}`, { vectors: { size: 1, distance: 'Cosine' } });
+        _exists.add(name);
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  async function upsertTask(task) {
+    await ensureCollection('tasks');
+    await _req('PUT', '/collections/tasks/points', {
+      points: [{ id: task.id, vector: [0.0], payload: { id: task.id, title: task.title, status: task.status, tags: task.tags || [] } }]
+    });
+    return task;
+  }
+
+  async function getTask(id) {
+    try {
+      const r = await _req('GET', `/collections/tasks/points/${id}`);
+      return r.result ? r.result.payload : null;
+    } catch (e) { return null; }
+  }
+
+  async function deleteTask(id) {
+    await ensureCollection('tasks');
+    await _req('POST', '/collections/tasks/points/delete', { points: [id] });
+  }
+
+  async function scrollTasks(filter) {
+    await ensureCollection('tasks');
+    const body = { limit: 256, with_payload: true, with_vector: false };
+    if (filter && Object.keys(filter).length > 0) body.filter = filter;
+    const r = await _req('POST', '/collections/tasks/points/scroll', body);
+    return ((r.result && r.result.points) || []).map(p => p.payload);
+  }
+
+  async function saveLog(entry) {
+    await ensureCollection('log');
+    await _req('PUT', '/collections/log/points', {
+      points: [{ id: entry.id, vector: [0.0], payload: { id: entry.id, ts: entry.ts, from: entry.from, to: entry.to, data: entry.data, comment: entry.comment || '' } }]
+    });
+  }
+
+  async function getLogs() {
+    await ensureCollection('log');
+    const r = await _req('POST', '/collections/log/points/scroll', { limit: 256, with_payload: true, with_vector: false });
+    return ((r.result && r.result.points) || []).map(p => p.payload).sort((a, b) => a.ts - b.ts);
+  }
+
+  async function clearLogs() {
+    await ensureCollection('log');
+    const r = await _req('POST', '/collections/log/points/scroll', { limit: 1000, with_payload: false, with_vector: false });
+    const ids = ((r.result && r.result.points) || []).map(p => p.id);
+    if (ids.length) await _req('POST', '/collections/log/points/delete', { points: ids });
+  }
+
+  async function updateLogComment(id, comment) {
+    try {
+      const r = await _req('GET', `/collections/log/points/${id}`);
+      if (!r.result) return;
+      const payload = { ...r.result.payload, comment };
+      await _req('PUT', '/collections/log/points', { points: [{ id, vector: [0.0], payload }] });
+    } catch (e) {}
+  }
+
+  return { upsertTask, getTask, deleteTask, scrollTasks, saveLog, getLogs, clearLogs, updateLogComment, ensureCollection };
+})();
+
+// ─── storageModule ────────────────────────────────────────────────────────────
+const storageModule = (() => {
+  function validate(p) {
+    if (!p || !p.op) throw new Error('op обязателен');
+    if (p.op === 'add' && !p.task?.title) throw new Error('title обязателен для add');
+    if ((p.op === 'update' || p.op === 'delete') && !p.task?.id) throw new Error('id обязателен');
+  }
+
+  async function patch(p) {
+    try { validate(p); } catch (e) { return { ok: false, error: e.message }; }
+
+    try {
+      if (p.op === 'add') {
+        undoModule.snapshot(window.__tasksCache);
+        const task = { id: crypto.randomUUID(), title: p.task.title, status: p.task.status || 'сегодня', tags: p.task.tags || [] };
+        await QdrantBackend.upsertTask(task);
+        return { ok: true, task };
+      }
+      if (p.op === 'update') {
+        const existing = await QdrantBackend.getTask(p.task.id);
+        if (!existing) return { ok: false, error: 'Задача не найдена' };
+        undoModule.snapshot(window.__tasksCache);
+        const updated = { ...existing };
+        if (p.task.title !== undefined) updated.title = p.task.title;
+        if (p.task.status !== undefined) updated.status = p.task.status;
+        if (p.task.tags !== undefined) updated.tags = [...new Set([...(updated.tags || []), ...p.task.tags])];
+        if (p.task._removeTags !== undefined) updated.tags = (updated.tags || []).filter(t => !p.task._removeTags.includes(t));
+        await QdrantBackend.upsertTask(updated);
+        return { ok: true, task: updated };
+      }
+      if (p.op === 'delete') {
+        undoModule.snapshot(window.__tasksCache);
+        await QdrantBackend.deleteTask(p.task.id);
+        return { ok: true };
+      }
+      return { ok: false, error: 'Неизвестный op' };
+    } catch (e) {
+      toast('Ошибка: ' + e.message);
+      return { ok: false, error: e.message };
+    }
+  }
+
+  async function query(q) {
+    try {
+      const must = [];
+      if (q.status) must.push({ key: 'status', match: { value: q.status } });
+      if (q.tags) q.tags.forEach(tag => must.push({ key: 'tags', match: { value: tag } }));
+      const filter = must.length ? { must } : {};
+      let tasks = await QdrantBackend.scrollTasks(filter);
+      if (q.text) {
+        const needle = q.text.toLowerCase();
+        tasks = tasks.filter(t => t.title && t.title.toLowerCase().includes(needle));
+      }
+      return { ok: true, tasks };
+    } catch (e) {
+      toast('Ошибка поиска: ' + e.message);
+      return { ok: false, tasks: [], error: e.message };
+    }
+  }
+
+  async function saveLog(e) { try { await QdrantBackend.saveLog(e); } catch (_) {} }
+  async function getLogs() { try { return await QdrantBackend.getLogs(); } catch (_) { return []; } }
+  async function clearLogs() { try { await QdrantBackend.clearLogs(); } catch (_) {} }
+  async function updateLogComment(id, c) { try { await QdrantBackend.updateLogComment(id, c); } catch (_) {} }
+
+  return { patch, query, saveLog, getLogs, clearLogs, updateLogComment };
+})();
+
+// ─── undoModule ───────────────────────────────────────────────────────────────
+const undoModule = (() => {
+  function snapshot(tasks) {
+    window.__undoSnapshot = JSON.parse(JSON.stringify(tasks || []));
+  }
+
+  async function undo() {
+    if (!window.__undoSnapshot) { toast('Нечего отменять'); return; }
+    const snap = window.__undoSnapshot;
+    window.__undoSnapshot = null;
+    try {
+      // Delete all current tasks
+      const cur = await QdrantBackend.scrollTasks({});
+      for (const t of cur) await QdrantBackend.deleteTask(t.id);
+      // Restore snapshot
+      for (const t of snap) await QdrantBackend.upsertTask(t);
+      await LOG.emit('undo', 'storage', { restored: snap });
+      render(snap);
+      toast('Изменения отменены');
+    } catch (e) {
+      toast('Ошибка undo: ' + e.message);
+    }
+  }
+
+  return { snapshot, undo };
+})();
+
+// ─── logModule ────────────────────────────────────────────────────────────────
+const logModule = (() => {
+  async function emit(from, to, data) {
+    const entry = { id: crypto.randomUUID(), ts: Date.now(), from, to, data, comment: '' };
+    window.__logCache.push(entry);
+    renderLogList();
+    storageModule.saveLog(entry);
+  }
+
+  function renderLogList() {
+    const ul = document.getElementById('log-list');
+    ul.innerHTML = '';
+    [...window.__logCache].reverse().forEach(entry => {
+      const li = document.createElement('li');
+      li.className = 'log-entry';
+      li.dataset.logId = entry.id;
+      li.innerHTML = `<span class="log-ft">[${escHtml(entry.from)}→${escHtml(entry.to)}]</span>` +
+        `<span class="log-data">${escHtml(JSON.stringify(entry.data))}</span>` +
+        (entry.comment ? `<span class="log-comment">💬 ${escHtml(entry.comment)}</span>` : '');
+      ul.appendChild(li);
+      receiveModule.attachPTT(li, 'log', entry.id);
+    });
+  }
+
+  async function loadLogs() {
+    window.__logCache = await storageModule.getLogs();
+    renderLogList();
+  }
+
+  async function clearLogs() {
+    await storageModule.clearLogs();
+    window.__logCache = [];
+    renderLogList();
+  }
+
+  async function copyLogs() {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(window.__logCache, null, 2));
+      toast('Лог скопирован');
+    } catch (_) { toast('Ошибка копирования'); }
+  }
+
+  async function updateComment(logId, comment) {
+    const entry = window.__logCache.find(e => e.id === logId);
+    if (entry) {
+      entry.comment = comment;
+      await storageModule.updateLogComment(logId, comment);
+      renderLogList();
+    }
+  }
+
+  return { emit, renderLogList, loadLogs, clearLogs, copyLogs, updateComment };
+})();
+const LOG = logModule;
+
+// ─── cloudModule ──────────────────────────────────────────────────────────────
+const cloudModule = (() => {
+  async function _call(systemPrompt, userMsg) {
+    const cfg = window.__cfg || {};
+    if (!cfg.llmKey) { toast('Нет LLM-ключа — настройте в ⚙'); return null; }
+    const provider = (cfg.llmProvider || 'openrouter').toLowerCase();
+    let url, headers, body;
+    if (provider === 'anthropic') {
+      url = 'https://api.anthropic.com/v1/messages';
+      headers = { 'Content-Type': 'application/json', 'x-api-key': cfg.llmKey, 'anthropic-version': '2023-06-01' };
+      body = { model: cfg.llmModel || 'claude-haiku-4-5-20251001', max_tokens: 300, system: systemPrompt, messages: [{ role: 'user', content: userMsg }] };
+    } else {
+      url = provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
+      headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.llmKey}` };
+      body = { model: cfg.llmModel || 'anthropic/claude-haiku-4-5-20251001', max_tokens: 300, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }] };
+    }
+    try {
+      const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(`LLM ${res.status}`);
+      const data = await res.json();
+      const text = provider === 'anthropic' ? (data.content?.[0]?.text || '') : (data.choices?.[0]?.message?.content || '');
+      const m = text.match(/\{[\s\S]*\}/);
+      return m ? JSON.parse(m[0]) : null;
+    } catch (e) {
+      toast('LLM недоступен: ' + e.message);
+      return null;
+    }
+  }
+
+  async function _sysPrompt() {
+    const tasks = window.__tasksCache.slice(0, 30);
+    return `Ты помощник управления задачами. Статусы: ${STATUSES.join(', ')}.
+Задачи: ${JSON.stringify(tasks)}.
+Верни ТОЛЬКО JSON (без markdown):
+- Добавить: {"op":"add","task":{"title":"..."}}
+- Обновить статус: {"op":"update","task":{"id":"...","status":"..."}}
+- Переименовать: {"op":"update","task":{"id":"...","title":"..."}}
+- Добавить теги: {"op":"update","task":{"id":"...","tags":["..."]}}
+- Убрать теги: {"op":"update","task":{"id":"...","_removeTags":["..."]}}
+- Удалить: {"op":"delete","task":{"id":"..."}}
+- Поиск: {"search":true,"text":"...","status":"...","tags":["..."]}`;
+  }
+
+  async function extract(transcript, taskId) {
+    const sys = await _sysPrompt();
+    return _call(sys, `Задача ID: ${taskId}. Команда: "${transcript}"`);
+  }
+
+  async function interpret(transcript) {
+    const sys = await _sysPrompt();
+    return _call(sys, `Команда: "${transcript}"`);
+  }
+
+  return { extract, interpret };
+})();
+
+// ─── extractModule ────────────────────────────────────────────────────────────
+const extractModule = (() => {
+  async function handle({ taskId, transcript }) {
+    if (!transcript) return;
+    await LOG.emit('receive', 'extract', { elementType: 'task', taskId, transcript });
+    const t = transcript.toLowerCase().trim();
+    let p = null;
+
+    if (/^удали/.test(t)) {
+      p = { op: 'delete', task: { id: taskId } };
+    } else if (/^в архив/.test(t)) {
+      p = { op: 'update', task: { id: taskId, status: 'архив' } };
+    } else {
+      const renM = t.match(/^(измени|переименуй)\s+(.+)/);
+      if (renM) {
+        p = { op: 'update', task: { id: taskId, title: renM[2].trim() } };
+      } else {
+        const notM = t.match(/^это не (.+)/);
+        if (notM) {
+          const w = notM[1].trim();
+          p = STATUSES.includes(w)
+            ? { op: 'update', task: { id: taskId, status: 'сегодня' } }
+            : { op: 'update', task: { id: taskId, _removeTags: [w] } };
+        } else {
+          const isM = t.match(/^это (.+)/);
+          if (isM) {
+            const w = isM[1].trim();
+            p = STATUSES.includes(w)
+              ? { op: 'update', task: { id: taskId, status: w } }
+              : { op: 'update', task: { id: taskId, tags: [w] } };
+          }
+        }
+      }
+    }
+
+    if (!p) {
+      p = await cloudModule.extract(transcript, taskId);
+      if (!p || p.search) { toast('Команда не распознана'); return; }
+    }
+
+    await LOG.emit('extract', 'storage', p);
+    const result = await storageModule.patch(p);
+    if (result.ok) {
+      const r = await storageModule.query({});
+      if (r.ok) render(r.tasks || []);
+    } else {
+      toast('Ошибка: ' + result.error);
+    }
+  }
+
+  return { handle };
+})();
+
+// ─── receiveModule ────────────────────────────────────────────────────────────
+const receiveModule = (() => {
+  function _mkRec() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    const r = new SR();
+    r.lang = 'ru-RU';
+    r.continuous = false;
+    r.interimResults = true;
+    return r;
+  }
+
+  function attachPTT(el, type, id) {
+    let t0 = 0;
+    let transcript = '';
+    let rec = null;
+    let recDone = false;
+    let moved = false;
+    let startX = 0, startY = 0;
+    let overlayTimer = null;
+    let handlingEnd = false;
+
+    el.addEventListener('touchstart', e => {
+      t0 = Date.now();
+      transcript = '';
+      recDone = false;
+      moved = false;
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+
+      const r = _mkRec();
+      if (!r) return;
+      rec = r;
+
+      r.onresult = ev => {
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          if (ev.results[i].isFinal) transcript += ev.results[i][0].transcript;
+          else setOverlayText(ev.results[i][0].transcript);
+        }
+      };
+      r.onend = () => { recDone = true; };
+      r.onerror = ev => {
+        recDone = true;
+        if (ev.error !== 'aborted') toast('Ошибка записи: ' + ev.error);
+        clearTimeout(overlayTimer);
+        hideOverlay();
+      };
+      try { r.start(); } catch (_) {}
+
+      // Show overlay only after 200ms (confirm long press)
+      overlayTimer = setTimeout(() => {
+        if (!moved) showOverlay('');
+      }, 210);
+    }, { passive: true });
+
+    el.addEventListener('touchmove', e => {
+      const dx = Math.abs(e.touches[0].clientX - startX);
+      const dy = Math.abs(e.touches[0].clientY - startY);
+      if (dx > 12 || dy > 12) {
+        moved = true;
+        clearTimeout(overlayTimer);
+        if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
+        hideOverlay();
+      }
+    }, { passive: true });
+
+    el.addEventListener('touchcancel', () => {
+      clearTimeout(overlayTimer);
+      moved = true;
+      if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
+      hideOverlay();
+    }, { passive: true });
+
+    el.addEventListener('touchend', async e => {
+      clearTimeout(overlayTimer);
+      if (moved || handlingEnd) return;
+      handlingEnd = true;
+      const dur = Date.now() - t0;
+
+      if (dur < 200) {
+        // Short tap — abort recording
+        if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
+        rec = null;
+        hideOverlay();
+        handlingEnd = false;
+        if (type === 'task') {
+          el.classList.add('flash');
+          setTimeout(() => el.classList.remove('flash'), 500);
+        }
+        return;
+      }
+
+      // Long press — finalize recording
+      showOverlay(transcript || 'Обработка...');
+      if (rec && !recDone) {
+        await new Promise(resolve => {
+          rec.onend = () => { recDone = true; resolve(); };
+          try { rec.stop(); } catch (_) { resolve(); }
+        });
+      }
+      hideOverlay();
+      rec = null;
+
+      const final = transcript.trim();
+      if (!final) { toast('Ничего не записано'); return; }
+
+      try {
+        if (type === 'task') {
+          await extractModule.handle({ taskId: id, transcript: final });
+        } else {
+          await LOG.emit('receive', 'log', { elementType: 'log', logId: id, transcript: final });
+          await logModule.updateComment(id, final);
+          toast('Комментарий добавлен');
+        }
+      } finally {
+        handlingEnd = false;
+      }
+    }, { passive: true });
+  }
+
+  return { attachPTT };
+})();
+
+// ─── searchModule ─────────────────────────────────────────────────────────────
+const searchModule = (() => {
+  function init() {
+    const btn = document.getElementById('btn-ptt');
+    let t0 = 0;
+    let transcript = '';
+    let rec = null;
+    let recDone = false;
+
+    function _mkRec() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) { toast('Web Speech API не поддерживается'); return null; }
+      const r = new SR();
+      r.lang = 'ru-RU';
+      r.continuous = false;
+      r.interimResults = true;
+      return r;
+    }
+
+    function start() {
+      t0 = Date.now();
+      transcript = '';
+      recDone = false;
+      const r = _mkRec();
+      if (!r) return;
+      rec = r;
+      r.onresult = ev => {
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          if (ev.results[i].isFinal) transcript += ev.results[i][0].transcript;
+          else setOverlayText(ev.results[i][0].transcript);
+        }
+      };
+      r.onend = () => { recDone = true; };
+      r.onerror = ev => {
+        recDone = true;
+        if (ev.error !== 'aborted') toast('Ошибка записи: ' + ev.error);
+        hideOverlay();
+      };
+      try { r.start(); } catch (_) {}
+      showOverlay('');
+    }
+
+    async function stop() {
+      const dur = Date.now() - t0;
+      if (dur < 200) {
+        if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
+        rec = null;
+        hideOverlay();
+        return;
+      }
+      setOverlayText(transcript || 'Обработка...');
+      if (rec && !recDone) {
+        await new Promise(resolve => {
+          rec.onend = () => { recDone = true; resolve(); };
+          try { rec.stop(); } catch (_) { resolve(); }
+        });
+      }
+      hideOverlay();
+      rec = null;
+      const final = transcript.trim();
+      if (!final) { toast('Ничего не записано'); return; }
+      await process(final);
+    }
+
+    let _busy = false;
+    async function _guardedStop() {
+      if (_busy) return;
+      _busy = true;
+      try { await stop(); } finally { _busy = false; }
+    }
+
+    btn.addEventListener('touchstart', e => { e.preventDefault(); start(); }, { passive: false });
+    btn.addEventListener('touchend', async e => { await _guardedStop(); }, { passive: true });
+    btn.addEventListener('mousedown', e => { if (e.button !== 0) return; start(); });
+    btn.addEventListener('mouseup', async e => { if (e.button !== 0) return; await _guardedStop(); });
+  }
+
+  async function process(transcript) {
+    const t = transcript.toLowerCase().trim();
+
+    // Add
+    const addM = t.match(/^(добавь|создай|новая\s+задача)\s+(.+)/);
+    if (addM) {
+      // Use index offset to preserve original casing (addM matched on lowercase t)
+      const prefixLen = addM[0].length - addM[2].length;
+      const title = transcript.slice(prefixLen).trim();
+      const p = { op: 'add', task: { title } };
+      await LOG.emit('search', 'storage', p);
+      const result = await storageModule.patch(p);
+      if (result.ok) {
+        const r = await storageModule.query({});
+        if (r.ok) render(r.tasks || []);
+        toast('Задача добавлена');
+      } else {
+        toast('Ошибка: ' + result.error);
+      }
+      return;
+    }
+
+    // Search
+    const srchM = t.match(/^найди?\s*(.*)/);
+    if (srchM) {
+      const rest = srchM[1];
+      const q = {};
+      for (const s of STATUSES) {
+        if (rest.includes(s)) { q.status = s; break; }
+      }
+      const tagM = rest.match(/(?:с\s+тегом?|тегом?)\s+(\S+)/);
+      if (tagM) q.tags = [tagM[1]];
+      let text = rest
+        .replace(/с\s+тегом?\s+\S+/g, '')
+        .replace(new RegExp(`(${STATUSES.join('|')})`, 'g'), '')
+        .trim();
+      if (text) q.text = text;
+      await LOG.emit('search', 'storage', q);
+      const result = await storageModule.query(q);
+      if (result.ok) {
+        render(result.tasks || []);
+        if (!result.tasks.length) toast('Ничего не найдено');
+      }
+      return;
+    }
+
+    // LLM fallback
+    const llm = await cloudModule.interpret(transcript);
+    if (!llm) return;
+    if (llm.search) {
+      const q = {};
+      if (llm.status) q.status = llm.status;
+      if (llm.tags) q.tags = llm.tags;
+      if (llm.text) q.text = llm.text;
+      const result = await storageModule.query(q);
+      if (result.ok) render(result.tasks || []);
+    } else if (llm.op) {
+      await LOG.emit('search', 'storage', llm);
+      const result = await storageModule.patch(llm);
+      if (result.ok) {
+        const r = await storageModule.query({});
+        if (r.ok) render(r.tasks || []);
+      }
+    }
+  }
+
+  return { init };
+})();
+
+// ─── render ───────────────────────────────────────────────────────────────────
+function render(tasks) {
+  window.__tasksCache = tasks || [];
+  const ul = document.getElementById('task-list');
+  const empty = document.getElementById('empty-state');
+  ul.innerHTML = '';
+  if (!tasks || !tasks.length) { empty.hidden = false; return; }
+  empty.hidden = true;
+  tasks.forEach(task => {
+    const li = document.createElement('li');
+    li.className = 'task-item';
+    li.dataset.taskId = task.id;
+    li.dataset.status = task.status || 'сегодня';
+    const icon = STATUS_ICON[task.status] || '📋';
+    const tags = (task.tags || []).map(t => `<span class="tag-pill">#${escHtml(t)}</span>`).join(' ');
+    li.innerHTML = `<div class="task-title">${icon} ${escHtml(task.title)}</div>` +
+      `<div class="task-meta"><span class="status-badge">${escHtml(task.status || 'сегодня')}</span>${tags}</div>`;
+    ul.appendChild(li);
+    receiveModule.attachPTT(li, 'task', task.id);
+  });
+}
+
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
+function initTabs() {
+  document.getElementById('tab-tasks').addEventListener('click', () => {
+    document.getElementById('task-panel').hidden = false;
+    document.getElementById('log-panel').hidden = true;
+    document.getElementById('tab-tasks').classList.add('active');
+    document.getElementById('tab-log').classList.remove('active');
+  });
+  document.getElementById('tab-log').addEventListener('click', () => {
+    document.getElementById('task-panel').hidden = true;
+    document.getElementById('log-panel').hidden = false;
+    document.getElementById('tab-tasks').classList.remove('active');
+    document.getElementById('tab-log').classList.add('active');
+    logModule.renderLogList();
+  });
+}
+
+// ─── App init ─────────────────────────────────────────────────────────────────
+async function appInit() {
+  if (!window.__cfg || !window.__cfg.qdrantUrl) return;
+  try {
+    const r = await storageModule.query({});
+    render(r.tasks || []);
+    await logModule.loadLogs();
+  } catch (e) {
+    toast('Ошибка загрузки: ' + e.message);
+  }
+}
+
+// ─── Bootstrap ────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  settingsModule.init();
+  document.getElementById('btn-settings').addEventListener('click', () => settingsModule.openModal());
+  document.getElementById('btn-save-settings').addEventListener('click', () => settingsModule.save());
+  document.getElementById('btn-close-settings').addEventListener('click', () => settingsModule.closeModal());
+  document.getElementById('settings-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('settings-modal')) settingsModule.closeModal();
+  });
+  document.getElementById('btn-undo').addEventListener('click', () => undoModule.undo());
+  document.getElementById('btn-clear-log').addEventListener('click', () => logModule.clearLogs());
+  document.getElementById('btn-copy-log').addEventListener('click', () => logModule.copyLogs());
+  initTabs();
+  searchModule.init();
+  appInit();
+});
+</script>
+</body>
+</html>
