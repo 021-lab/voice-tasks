@@ -817,8 +817,9 @@
 
     function cleanupSearchText(text) {
       let normalized = normalizeText(text);
+      const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       Object.keys(STATUS_ALIASES).forEach((key) => {
-        normalized = normalized.replace(new RegExp("\\b" + key + "\\b", "gu"), " ");
+        normalized = normalized.replace(new RegExp("(^|\\s)" + escapeRegex(key) + "(?=\\s|$)", "gu"), " ");
       });
       normalized = normalized.replace(/\bс тегом [\p{L}\p{N}_-]+\b/gu, " ");
       normalized = normalized.replace(/\bтег [\p{L}\p{N}_-]+\b/gu, " ");
