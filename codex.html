@@ -928,14 +928,21 @@
         }
 
         const url = cfg.qdrantUrl.replace(/\/$/, "") + path;
-        const response = await fetch(url, {
-          method,
-          headers: {
-            "Content-Type": "application/json",
-            "api-key": cfg.qdrantKey || ""
-          },
-          body: body === undefined ? undefined : JSON.stringify(body)
-        });
+        let response;
+        try {
+          response = await fetch(url, {
+            method,
+            headers: {
+              "Content-Type": "application/json",
+              "api-key": cfg.qdrantKey || ""
+            },
+            body: body === undefined ? undefined : JSON.stringify(body)
+          });
+        } catch (_error) {
+          const networkError = new Error("нет соединения");
+          networkError.status = 0;
+          throw networkError;
+        }
 
         if (!response.ok) {
           const error = new Error("Qdrant request failed");
