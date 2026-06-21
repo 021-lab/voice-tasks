@@ -352,11 +352,9 @@ const storageModule = (() => {
 
   async function query(q) {
     try {
-      const must = [];
-      if (q.status) must.push({ key: 'status', match: { value: q.status } });
-      if (q.tags) q.tags.forEach(tag => must.push({ key: 'tags', match: { value: tag } }));
-      const filter = must.length ? { must } : {};
-      let tasks = await QdrantBackend.scrollTasks(filter);
+      let tasks = await QdrantBackend.scrollTasks({});
+      if (q.status) tasks = tasks.filter(t => t.status === q.status);
+      if (q.tags) q.tags.forEach(tag => { tasks = tasks.filter(t => (t.tags || []).includes(tag)); });
       if (q.text) {
         const needle = q.text.toLowerCase();
         tasks = tasks.filter(t => t.title && t.title.toLowerCase().includes(needle));
@@ -387,10 +385,8 @@ const undoModule = (() => {
     const snap = window.__undoSnapshot;
     window.__undoSnapshot = null;
     try {
-      // Delete all current tasks
       const cur = await QdrantBackend.scrollTasks({});
       for (const t of cur) await QdrantBackend.deleteTask(t.id);
-      // Restore snapshot
       for (const t of snap) await QdrantBackend.upsertTask(t);
       await LOG.emit('undo', 'storage', { restored: snap });
       render(snap);
@@ -617,7 +613,6 @@ const receiveModule = (() => {
       };
       try { r.start(); } catch (_) {}
 
-      // Show overlay only after 200ms (confirm long press)
       overlayTimer = setTimeout(() => {
         if (!moved) showOverlay('');
       }, 210);
@@ -648,7 +643,6 @@ const receiveModule = (() => {
       const dur = Date.now() - t0;
 
       if (dur < 200) {
-        // Short tap — abort recording
         if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
         rec = null;
         hideOverlay();
@@ -660,7 +654,6 @@ const receiveModule = (() => {
         return;
       }
 
-      // Long press — finalize recording
       showOverlay(transcript || 'Обработка...');
       if (rec && !recDone) {
         await new Promise(resolve => {
@@ -771,10 +764,8 @@ const searchModule = (() => {
   async function process(transcript) {
     const t = transcript.toLowerCase().trim();
 
-    // Add
     const addM = t.match(/^(добавь|создай|новая\s+задача)\s+(.+)/);
     if (addM) {
-      // Use index offset to preserve original casing (addM matched on lowercase t)
       const prefixLen = addM[0].length - addM[2].length;
       const title = transcript.slice(prefixLen).trim();
       const p = { op: 'add', task: { title } };
@@ -790,7 +781,6 @@ const searchModule = (() => {
       return;
     }
 
-    // Search
     const srchM = t.match(/^найди?\s*(.*)/);
     if (srchM) {
       const rest = srchM[1];
@@ -814,7 +804,6 @@ const searchModule = (() => {
       return;
     }
 
-    // LLM fallback
     const llm = await cloudModule.interpret(transcript);
     if (!llm) return;
     if (llm.search) {
