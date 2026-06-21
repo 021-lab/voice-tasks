@@ -346,6 +346,7 @@ const storageModule = (() => {
       return { ok: false, error: 'Неизвестный op' };
     } catch (e) {
       toast('Ошибка: ' + e.message);
+      LOG.emit('storage', 'error', { error: e.message, patch: p });
       return { ok: false, error: e.message };
     }
   }
@@ -362,6 +363,7 @@ const storageModule = (() => {
       return { ok: true, tasks };
     } catch (e) {
       toast('Ошибка поиска: ' + e.message);
+      LOG.emit('storage', 'error', { error: e.message, query: q });
       return { ok: false, tasks: [], error: e.message };
     }
   }
@@ -609,7 +611,10 @@ const receiveModule = (() => {
       r.onend = () => { recDone = true; };
       r.onerror = ev => {
         recDone = true;
-        if (ev.error !== 'aborted') toast('Ошибка записи: ' + ev.error);
+        if (ev.error !== 'aborted') {
+          toast('Ошибка записи: ' + ev.error);
+          LOG.emit('receive', 'error', { error: ev.error, stage: 'speech_recognition', elementType: type, id });
+        }
         clearTimeout(overlayTimer);
         hideOverlay();
       };
@@ -670,7 +675,11 @@ const receiveModule = (() => {
       rec = null;
 
       const final = transcript.trim();
-      if (!final) { toast('Ничего не записано'); return; }
+      if (!final) {
+        toast('Ничего не записано');
+        LOG.emit('receive', 'error', { error: 'empty_transcript', elementType: type, id });
+        return;
+      }
 
       try {
         if (type === 'task') {
@@ -724,7 +733,10 @@ const searchModule = (() => {
       r.onend = () => { recDone = true; };
       r.onerror = ev => {
         recDone = true;
-        if (ev.error !== 'aborted') toast('Ошибка записи: ' + ev.error);
+        if (ev.error !== 'aborted') {
+          toast('Ошибка записи: ' + ev.error);
+          LOG.emit('search', 'error', { error: ev.error, stage: 'speech_recognition' });
+        }
         hideOverlay();
       };
       try { r.start(); } catch (_) {}
@@ -749,7 +761,11 @@ const searchModule = (() => {
       hideOverlay();
       rec = null;
       const final = transcript.trim();
-      if (!final) { toast('Ничего не записано'); return; }
+      if (!final) {
+        toast('Ничего не записано');
+        LOG.emit('search', 'error', { error: 'empty_transcript' });
+        return;
+      }
       await process(final);
     }
 
@@ -883,6 +899,7 @@ async function appInit() {
     await logModule.loadLogs();
   } catch (e) {
     toast('Ошибка загрузки: ' + e.message);
+    LOG.emit('app', 'error', { error: e.message, stage: 'init' });
   }
 }
 
