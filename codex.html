@@ -1524,7 +1524,7 @@
           return JSON.parse(cleaned);
         } catch (error) {
           toast("нет сети, LLM недоступен");
-          return null;
+          return { kind: "error" };
         }
       }
 
@@ -1600,6 +1600,9 @@
 
         if (!patch) {
           const aiResult = await cloudModule.extract(input.transcript, taskId);
+          if (aiResult && aiResult.kind === "error") {
+            return;
+          }
           if (aiResult && aiResult.kind === "patch") {
             patch = aiResult.value;
           }
@@ -1666,6 +1669,9 @@
 
         if (!routed) {
           const aiResult = await cloudModule.interpret(transcript);
+          if (aiResult && aiResult.kind === "error") {
+            return;
+          }
           if (aiResult) {
             routed = aiResult;
           }
