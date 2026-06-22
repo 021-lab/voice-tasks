@@ -120,6 +120,7 @@
     <textarea id="settings-textarea" rows="8" autocomplete="off" autocorrect="off" spellcheck="false"
       placeholder="QDRANT_URL=https://xxx.qdrant.io&#10;QDRANT_KEY=abc123&#10;LLM_PROVIDER=openrouter&#10;LLM_KEY=sk-or-...&#10;LLM_MODEL=anthropic/claude-haiku-4-5-20251001"></textarea>
     <div class="dialog-btns">
+      <button class="btn" id="btn-test-qdrant">Тест связи</button>
       <button class="btn" id="btn-close-settings">Отмена</button>
       <button class="btn" id="btn-save-settings">Сохранить</button>
     </div>
@@ -318,61 +319,98 @@ const QdrantBackend = (() => {
   return { upsertTask, getTask, deleteTask, scrollTasks, saveLog, getLogs, clearLogs, updateLogComment, ensureCollection };
 })();
 
+// ─── LocalBackend ─────────────────────────────────────────────────────────────
+const LocalBackend = (() => {
+  const KEY = 'vt_tasks_v1';
+  function _load() { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (_) { return []; } }
+  function _save(t) { try { localStorage.setItem(KEY, JSON.stringify(t)); } catch (_) {} }
+  async function upsertTask(task) {
+    const tasks = _load();
+    const i = tasks.findIndex(t => t.id === task.id);
+    if (i >= 0) tasks[i] = task; else tasks.push(task);
+    _save(tasks); return task;
+  }
+  async function getTask(id) { return _load().find(t => t.id === id) || null; }
+  async function deleteTask(id) { _save(_load().filter(t => t.id !== id)); }
+  async function scrollTasks() { return _load(); }
+  return { upsertTask, getTask, deleteTask, scrollTasks };
+})();
+
 // ─── storageModule ────────────────────────────────────────────────────────────
 const storageModule = (() => {
+  function _backend() {
+    return (window.__cfg && window.__cfg.qdrantUrl) ? QdrantBackend : LocalBackend;
+  }
+
   function validate(p) {
     if (!p || !p.op) throw new Error('op обязателен');
     if (p.op === 'add' && !p.task?.title) throw new Error('title обязателен для add');
     if ((p.op === 'update' || p.op === 'delete') && !p.task?.id) throw new Error('id обязателен');
   }
 
+  async function _exec(b, p) {
+    if (p.op === 'add') {
+      undoModule.snapshot(window.__tasksCache);
+      const task = { id: crypto.randomUUID(), title: p.task.title, status: p.task.status || 'сегодня', tags: p.task.tags || [] };
+      await b.upsertTask(task);
+      return { ok: true, task };
+    }
+    if (p.op === 'update') {
+      const existing = await b.getTask(p.task.id);
+      if (!existing) return { ok: false, error: 'Задача не найдена' };
+      undoModule.snapshot(window.__tasksCache);
+      const updated = { ...existing };
+      if (p.task.title !== undefined) updated.title = p.task.title;
+      if (p.task.status !== undefined) updated.status = p.task.status;
+      if (p.task.tags !== undefined) updated.tags = [...new Set([...(updated.tags || []), ...p.task.tags])];
+      if (p.task._removeTags !== undefined) updated.tags = (updated.tags || []).filter(t => !p.task._removeTags.includes(t));
+      await b.upsertTask(updated);
+      return { ok: true, task: updated };
+    }
+    if (p.op === 'delete') {
+      undoModule.snapshot(window.__tasksCache);
+      await b.deleteTask(p.task.id);
+      return { ok: true };
+    }
+    return { ok: false, error: 'Неизвестный op' };
+  }
+
   async function patch(p) {
     try { validate(p); } catch (e) { return { ok: false, error: e.message }; }
-
+    const b = _backend();
     try {
-      if (p.op === 'add') {
-        undoModule.snapshot(window.__tasksCache);
-        const task = { id: crypto.randomUUID(), title: p.task.title, status: p.task.status || 'сегодня', tags: p.task.tags || [] };
-        await QdrantBackend.upsertTask(task);
-        return { ok: true, task };
-      }
-      if (p.op === 'update') {
-        const existing = await QdrantBackend.getTask(p.task.id);
-        if (!existing) return { ok: false, error: 'Задача не найдена' };
-        undoModule.snapshot(window.__tasksCache);
-        const updated = { ...existing };
-        if (p.task.title !== undefined) updated.title = p.task.title;
-        if (p.task.status !== undefined) updated.status = p.task.status;
-        if (p.task.tags !== undefined) updated.tags = [...new Set([...(updated.tags || []), ...p.task.tags])];
-        if (p.task._removeTags !== undefined) updated.tags = (updated.tags || []).filter(t => !p.task._removeTags.includes(t));
-        await QdrantBackend.upsertTask(updated);
-        return { ok: true, task: updated };
-      }
-      if (p.op === 'delete') {
-        undoModule.snapshot(window.__tasksCache);
-        await QdrantBackend.deleteTask(p.task.id);
-        return { ok: true };
-      }
-      return { ok: false, error: 'Неизвестный op' };
+      return await _exec(b, p);
     } catch (e) {
-      toast('Ошибка: ' + e.message);
+      if (b === QdrantBackend) {
+        LOG.emit('storage', 'warn', { error: e.message, fallback: 'local' });
+        toast('Qdrant недоступен — сохранено локально');
+        try { return await _exec(LocalBackend, p); } catch (e2) {
+          LOG.emit('storage', 'error', { error: e2.message, patch: p });
+          return { ok: false, error: e2.message };
+        }
+      }
       LOG.emit('storage', 'error', { error: e.message, patch: p });
       return { ok: false, error: e.message };
     }
   }
 
   async function query(q) {
-    try {
-      let tasks = await QdrantBackend.scrollTasks({});
+    const b = _backend();
+    async function _filter(tasks) {
       if (q.status) tasks = tasks.filter(t => t.status === q.status);
       if (q.tags) q.tags.forEach(tag => { tasks = tasks.filter(t => (t.tags || []).includes(tag)); });
-      if (q.text) {
-        const needle = q.text.toLowerCase();
-        tasks = tasks.filter(t => t.title && t.title.toLowerCase().includes(needle));
-      }
-      return { ok: true, tasks };
+      if (q.text) { const n = q.text.toLowerCase(); tasks = tasks.filter(t => t.title && t.title.toLowerCase().includes(n)); }
+      return tasks;
+    }
+    try {
+      return { ok: true, tasks: await _filter(await b.scrollTasks()) };
     } catch (e) {
-      toast('Ошибка поиска: ' + e.message);
+      if (b === QdrantBackend) {
+        LOG.emit('storage', 'warn', { error: e.message, fallback: 'local' });
+        try { return { ok: true, tasks: await _filter(await LocalBackend.scrollTasks()) }; } catch (e2) {
+          return { ok: false, tasks: [], error: e2.message };
+        }
+      }
       LOG.emit('storage', 'error', { error: e.message, query: q });
       return { ok: false, tasks: [], error: e.message };
     }
@@ -397,11 +435,10 @@ const undoModule = (() => {
     const snap = window.__undoSnapshot;
     window.__undoSnapshot = null;
     try {
-      // Delete all current tasks
-      const cur = await QdrantBackend.scrollTasks({});
-      for (const t of cur) await QdrantBackend.deleteTask(t.id);
-      // Restore snapshot
-      for (const t of snap) await QdrantBackend.upsertTask(t);
+      const b = (window.__cfg && window.__cfg.qdrantUrl) ? QdrantBackend : LocalBackend;
+      const cur = await b.scrollTasks();
+      for (const t of cur) await b.deleteTask(t.id);
+      for (const t of snap) await b.upsertTask(t);
       await LOG.emit('undo', 'storage', { restored: snap });
       render(snap);
       toast('Изменения отменены');
@@ -854,8 +891,8 @@ const searchModule = (() => {
     const t = transcript.toLowerCase().trim();
     await LOG.emit('search', 'process', { transcript });
 
-    // Add
-    const addM = t.match(/^(добавь|добавить|создай|создать|новая?\s+задач[уа]?)\s+(.+)/);
+    // Add — optional "задачу/задание" noise word after verb is stripped
+    const addM = t.match(/^(добавь|добавить|создай|создать|новая?\s+задач[уа]?)(?:\s+(?:задач[ую]|задание|новую?\s+задач[ую]))?\s+(.+)/);
     if (addM) {
       // Use index offset to preserve original casing (addM matched on lowercase t)
       const prefixLen = addM[0].length - addM[2].length;
@@ -983,6 +1020,26 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-settings').addEventListener('click', () => settingsModule.openModal());
   document.getElementById('btn-save-settings').addEventListener('click', () => settingsModule.save());
   document.getElementById('btn-close-settings').addEventListener('click', () => settingsModule.closeModal());
+  document.getElementById('btn-test-qdrant').addEventListener('click', async () => {
+    const url = window.__cfg && window.__cfg.qdrantUrl;
+    if (!url) { toast('QDRANT_URL не настроен'); return; }
+    const btn = document.getElementById('btn-test-qdrant');
+    btn.textContent = '...';
+    try {
+      const res = await fetch(url.replace(/\/$/, '') + '/collections', {
+        headers: { 'api-key': window.__cfg.qdrantKey || '' }
+      });
+      if (res.ok) {
+        const d = await res.json();
+        toast('✓ Qdrant OK: ' + (d.result?.collections?.length || 0) + ' коллекций');
+      } else {
+        toast('HTTP ' + res.status + ' — проверьте ключ');
+      }
+    } catch (e) {
+      toast('Нет связи: ' + e.message);
+      LOG.emit('settings', 'error', { error: e.message, url: url.slice(0, 40) });
+    } finally { btn.textContent = 'Тест связи'; }
+  });
   document.getElementById('settings-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('settings-modal')) settingsModule.closeModal();
   });
