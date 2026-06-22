@@ -656,6 +656,7 @@ const receiveModule = (() => {
   function attachPTT(el, type, id) {
     let t0 = 0;
     let transcript = '';
+    let _interim = '';
     let rec = null;
     let recDone = false;
     let moved = false;
@@ -666,6 +667,7 @@ const receiveModule = (() => {
     el.addEventListener('touchstart', e => {
       t0 = Date.now();
       transcript = '';
+      _interim = '';
       recDone = false;
       moved = false;
       const touch = e.touches[0];
@@ -678,8 +680,8 @@ const receiveModule = (() => {
 
       r.onresult = ev => {
         for (let i = ev.resultIndex; i < ev.results.length; i++) {
-          if (ev.results[i].isFinal) transcript += ev.results[i][0].transcript;
-          else setOverlayText(ev.results[i][0].transcript);
+          if (ev.results[i].isFinal) { transcript += ev.results[i][0].transcript; _interim = ''; }
+          else { _interim = ev.results[i][0].transcript; setOverlayText(_interim); }
         }
       };
       r.onend = () => { recDone = true; };
@@ -748,7 +750,7 @@ const receiveModule = (() => {
       hideOverlay();
       rec = null;
 
-      const final = transcript.trim();
+      const final = (transcript || _interim).trim();
       if (!final) {
         toast('Ничего не записано');
         LOG.emit('receive', 'error', { error: 'empty_transcript', elementType: type, id });
@@ -779,6 +781,7 @@ const searchModule = (() => {
     const BTN_IDLE = '🎤 Найди/Добавь';
     let t0 = 0;
     let transcript = '';
+    let _interim = '';
     let rec = null;
     let recDone = false;
 
@@ -811,14 +814,20 @@ const searchModule = (() => {
     function start() {
       t0 = Date.now();
       transcript = '';
+      _interim = '';
       recDone = false;
       const r = _mkRec();
       if (!r) return;
       rec = r;
       r.onresult = ev => {
         for (let i = ev.resultIndex; i < ev.results.length; i++) {
-          if (ev.results[i].isFinal) transcript += ev.results[i][0].transcript;
-          else btn.textContent = '⏺ ' + ev.results[i][0].transcript;
+          if (ev.results[i].isFinal) {
+            transcript += ev.results[i][0].transcript;
+            _interim = '';
+          } else {
+            _interim = ev.results[i][0].transcript;
+            btn.textContent = '⏺ ' + _interim;
+          }
         }
       };
       r.onend = () => { recDone = true; };
@@ -860,13 +869,16 @@ const searchModule = (() => {
       }
       _setRecording(false);
       rec = null;
-      const final = transcript.trim();
-      if (!final) {
+
+      // If API didn't deliver a final result, fall back to last interim
+      const raw = (transcript || _interim).trim();
+      await LOG.emit('search', 'raw', { text: raw || '(пусто)', dur, finalUsed: !!transcript, interimUsed: !transcript && !!_interim });
+
+      if (!raw) {
         toast('Ничего не записано');
-        LOG.emit('search', 'error', { error: 'empty_transcript' });
         return;
       }
-      await process(final);
+      await process(raw);
     }
 
     let _busy = false;
@@ -894,12 +906,10 @@ const searchModule = (() => {
 
   async function process(transcript) {
     const t = transcript.toLowerCase().trim();
-    await LOG.emit('search', 'process', { transcript });
 
-    // Add — optional "задачу/задание" noise word after verb is stripped
-    const addM = t.match(/^(добавь|добавить|создай|создать|новая?\s+задач[уа]?)(?:\s+(?:задач[ую]|задание|новую?\s+задач[ую]))?\s+(.+)/);
+    // Add — optional «задачу/задание/новую задачу» noise word after verb is stripped
+    const addM = t.match(/^(добавь|добавить|создай|создать|запиши|запомни|новая?\s+задач[уа]?)(?:\s+(?:задач[ую]|задание|новую?\s+задач[ую]))?\s+(.+)/);
     if (addM) {
-      // Use index offset to preserve original casing (addM matched on lowercase t)
       const prefixLen = addM[0].length - addM[2].length;
       const title = transcript.slice(prefixLen).trim();
       const p = { op: 'add', task: { title } };
@@ -913,8 +923,8 @@ const searchModule = (() => {
       return;
     }
 
-    // Search
-    const srchM = t.match(/^найди?\s*(.*)/);
+    // Search — найди/найти/покажи + optional text/status/tag
+    const srchM = t.match(/^(?:найди?(?:те)?|найти|покажи?(?:те)?)\s*(.*)/);
     if (srchM) {
       const rest = srchM[1];
       const q = {};
@@ -926,6 +936,7 @@ const searchModule = (() => {
       let text = rest
         .replace(/с\s+тегом?\s+\S+/g, '')
         .replace(new RegExp(`(${STATUSES.join('|')})`, 'g'), '')
+        .replace(/\b(задачи?|задание|все|всё|мои?)\b/g, '')
         .trim();
       if (text) q.text = text;
       await LOG.emit('search', 'storage', q);
