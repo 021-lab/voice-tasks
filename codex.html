@@ -680,11 +680,15 @@
     };
     const TASKS_COLLECTION = "task-codex";
     const LOG_COLLECTION = "log-codex";
+    const RECEIVE_DEBUG_COLLECTION = "receive-debug-codex";
 
     window.__cfg = {};
     window.__tasksCache = [];
     window.__logCache = [];
     window.__undoSnapshot = null;
+    window.__receiveDebugLog = [];
+    window.__receiveDebugRemoteLog = [];
+    window.__receiveDebugCollection = RECEIVE_DEBUG_COLLECTION;
 
     const dom = {
       taskList: document.getElementById("task-list"),
@@ -1163,6 +1167,14 @@
         return entry;
       }
 
+      async function saveReceiveDebug(entry) {
+        await ensureCollection(RECEIVE_DEBUG_COLLECTION);
+        await _req("PUT", "/collections/" + RECEIVE_DEBUG_COLLECTION + "/points", {
+          points: [{ id: entry.id, vector: [0.0], payload: entry }]
+        });
+        return entry;
+      }
+
       async function getLogs() {
         await ensureCollection(LOG_COLLECTION);
         const response = await _req("POST", "/collections/" + LOG_COLLECTION + "/points/scroll", {
@@ -1201,6 +1213,32 @@
         return updated;
       }
 
+      async function getReceiveDebug(limit) {
+        await ensureCollection(RECEIVE_DEBUG_COLLECTION);
+        const response = await _req("POST", "/collections/" + RECEIVE_DEBUG_COLLECTION + "/points/scroll", {
+          limit: limit || 300,
+          with_payload: true,
+          with_vector: false
+        });
+        const points = response.result && response.result.points ? response.result.points : [];
+        return points
+          .map((point) => point.payload)
+          .filter(Boolean)
+          .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
+      }
+
+      async function clearReceiveDebug() {
+        await ensureCollection(RECEIVE_DEBUG_COLLECTION);
+        const items = await getReceiveDebug(500);
+        if (!items.length) {
+          return true;
+        }
+        await _req("POST", "/collections/" + RECEIVE_DEBUG_COLLECTION + "/points/delete", {
+          points: items.map((entry) => entry.id)
+        });
+        return true;
+      }
+
       return {
         ensureCollection,
         getTask,
@@ -1209,9 +1247,12 @@
         replaceAllTasks,
         queryTasks,
         saveLog,
+        saveReceiveDebug,
         getLogs,
         clearLogs,
         updateLogComment,
+        getReceiveDebug,
+        clearReceiveDebug,
         _fallbackState: {
           tasksToScrollResult,
           logToScrollResult
@@ -1347,10 +1388,27 @@
         }
       };
 
+      const debug = {
+        async saveReceive(entry) {
+          return QdrantBackend.saveReceiveDebug(entry);
+        },
+        async listReceive(limit) {
+          const items = await QdrantBackend.getReceiveDebug(limit);
+          window.__receiveDebugRemoteLog = items;
+          return items;
+        },
+        async clearReceive() {
+          await QdrantBackend.clearReceiveDebug();
+          window.__receiveDebugRemoteLog = [];
+          return true;
+        }
+      };
+
       return {
         patch,
         query,
-        log
+        log,
+        debug
       };
     })();
 
@@ -1726,20 +1784,75 @@
       const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
       let recognition = null;
       let activeSession = null;
+      let debugWriteChain = Promise.resolve();
+      const SOURCE_FILE = "codex.html";
+      const SOURCE_MAP = {
+        "touchstart": { fn: "attachLongPress.touchstart", line: 2071 },
+        "session:init": { fn: "startSession", line: 2009 },
+        "session:start": { fn: "startSession", line: 2026 },
+        "recognition:create:begin": { fn: "createRecognition", line: 1850 },
+        "createRecognition:unsupported": { fn: "createRecognition", line: 1854 },
+        "recognition:create:ready": { fn: "createRecognition", line: 1864 },
+        "recognition:handlers-bound": { fn: "startSession", line: 2034 },
+        "overlay:shown": { fn: "startSession", line: 2038 },
+        "recognition:start:attempt": { fn: "startSession", line: 2044 },
+        "recognition:start:success": { fn: "startSession", line: 2048 },
+        "session:start-failed": { fn: "startSession", line: 2052 },
+        "touchend": { fn: "attachLongPress.touchend", line: 2083 },
+        "press:abort-short": { fn: "abortShortPress", line: 1877 },
+        "press:finish": { fn: "finishPress", line: 1898 },
+        "recognition:result": { fn: "bindCommonHandlers.onresult", line: 1927 },
+        "recognition:error": { fn: "bindCommonHandlers.onerror", line: 1937 },
+        "recognition:end:without-session": { fn: "bindCommonHandlers.onend", line: 1950 },
+        "recognition:end": { fn: "bindCommonHandlers.onend", line: 1956 },
+        "route:search": { fn: "bindCommonHandlers.onend", line: 1974 },
+        "route:task": { fn: "bindCommonHandlers.onend", line: 1980 },
+        "route:log": { fn: "bindCommonHandlers.onend", line: 1993 },
+        "touchcancel": { fn: "attachLongPress.touchcancel", line: 2097 }
+      };
 
-      function pushDebug(stage, extra) {
+      function resolveSource(stage) {
+        const hint = SOURCE_MAP[stage] || { fn: "receiveModule", line: null };
+        return {
+          file: SOURCE_FILE,
+          fn: hint.fn,
+          line: hint.line
+        };
+      }
+
+      function queueRemoteDebug(entry) {
+        debugWriteChain = debugWriteChain
+          .catch(() => null)
+          .then(() => storageModule.debug.saveReceive(entry))
+          .then(() => {
+            window.__receiveDebugRemoteLog = [entry].concat(Array.isArray(window.__receiveDebugRemoteLog) ? window.__receiveDebugRemoteLog : []).slice(0, 200);
+          })
+          .catch((error) => {
+            console.warn("[receive-debug] remote write failed", { entry, error });
+          });
+        return debugWriteChain;
+      }
+
+      function pushDebug(stage, extra, sessionId) {
         const entry = {
+          id: crypto.randomUUID(),
           ts: Date.now(),
           stage,
+          sessionId: sessionId || (activeSession && activeSession.sessionId) || null,
+          source: resolveSource(stage),
           extra: extra || null
         };
         window.__receiveDebugLog = [entry].concat(Array.isArray(window.__receiveDebugLog) ? window.__receiveDebugLog : []).slice(0, 200);
         console.debug("[receive]", stage, extra || {});
+        queueRemoteDebug(entry);
       }
 
-      function createRecognition() {
+      function createRecognition(sessionId) {
+        pushDebug("recognition:create:begin", {
+          hasCtor: !!SpeechRecognitionCtor
+        }, sessionId);
         if (!SpeechRecognitionCtor) {
-          pushDebug("createRecognition:unsupported");
+          pushDebug("createRecognition:unsupported", null, sessionId);
           toast("SpeechRecognition недоступен");
           return null;
         }
@@ -1749,6 +1862,12 @@
         instance.interimResults = true;
         instance.maxAlternatives = 1;
         instance.continuous = false;
+        pushDebug("recognition:create:ready", {
+          lang: instance.lang,
+          interimResults: instance.interimResults,
+          maxAlternatives: instance.maxAlternatives,
+          continuous: instance.continuous
+        }, sessionId);
         return instance;
       }
 
@@ -1888,7 +2007,14 @@
       }
 
       function startSession(meta) {
-        recognition = createRecognition();
+        pushDebug("session:init", {
+          mode: meta.mode,
+          taskId: meta.taskId || null,
+          logId: meta.logId || null,
+          title: meta.overlayTitle || ""
+        }, meta.sessionId);
+
+        recognition = createRecognition(meta.sessionId);
         if (!recognition) {
           return;
         }
@@ -1906,13 +2032,27 @@
         });
 
         bindCommonHandlers(recognition);
+        pushDebug("recognition:handlers-bound", {
+          mode: activeSession.mode
+        });
         showOverlay(meta.overlayTitle, "Запись…");
+        pushDebug("overlay:shown", {
+          mode: activeSession.mode,
+          title: meta.overlayTitle || ""
+        });
 
         try {
-          recognition.start();
-        } catch (_error) {
-          pushDebug("session:start-failed", {
+          pushDebug("recognition:start:attempt", {
             mode: activeSession.mode
+          });
+          recognition.start();
+          pushDebug("recognition:start:success", {
+            mode: activeSession.mode
+          });
+        } catch (error) {
+          pushDebug("session:start-failed", {
+            mode: activeSession.mode,
+            error: error && error.message ? error.message : "start failed"
           });
           hideOverlay();
           toast("Не удалось запустить запись");
@@ -1927,12 +2067,15 @@
         element.addEventListener("touchstart", (event) => {
           event.preventDefault();
           pressedAt = Date.now();
+          const meta = metaFactory(element);
+          meta.sessionId = meta.sessionId || crypto.randomUUID();
           pushDebug("touchstart", {
             kind: element.dataset.kind || null,
-            taskId: element.dataset.id || null,
-            logId: element.dataset.logId || null
-          });
-          startSession(metaFactory(element));
+            taskId: meta.taskId || null,
+            logId: meta.logId || null,
+            targetId: element.id || null
+          }, meta.sessionId);
+          startSession(meta);
         }, { passive: false });
 
         element.addEventListener("touchend", (event) => {
