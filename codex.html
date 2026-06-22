@@ -647,8 +647,8 @@
   <div class="modal-root" id="settings-modal" hidden>
     <div class="modal-card">
       <h2>Настройки</h2>
-      <p>Вставьте `.env`-текст. Значения сохраняются в `localStorage['vt_env']` и становятся доступны как `window.__cfg`.</p>
-      <textarea id="settings-textarea" autocomplete="off" spellcheck="false" placeholder="QDRANT_URL=https://xxx.qdrant.io&#10;QDRANT_KEY=abc123&#10;LLM_PROVIDER=openrouter&#10;LLM_KEY=sk-or-...&#10;LLM_MODEL=anthropic/claude-haiku-4-5-20251001"></textarea>
+      <p>Вставьте `.env`-текст. Приложение работает только через proxy API, адрес proxy нужно задать как `QDRANT_PROXY_URL`.</p>
+      <textarea id="settings-textarea" autocomplete="off" spellcheck="false" placeholder="QDRANT_PROXY_URL=https://toolbox.smileme.ai/MCP/qdrant2/user/...&#10;LLM_PROVIDER=openrouter&#10;LLM_KEY=sk-or-...&#10;LLM_MODEL=anthropic/claude-haiku-4-5-20251001"></textarea>
       <div class="modal-actions">
         <button class="modal-btn" id="btn-close-settings">Отмена</button>
         <button class="modal-btn primary" id="btn-save-settings">Сохранить</button>
@@ -851,8 +851,7 @@
 
     const settingsModule = (() => {
       const envMap = {
-        QDRANT_URL: "qdrantUrl",
-        QDRANT_KEY: "qdrantKey",
+        QDRANT_PROXY_URL: "qdrantProxyUrl",
         LLM_PROVIDER: "llmProvider",
         LLM_KEY: "llmKey",
         LLM_MODEL: "llmModel"
@@ -925,18 +924,17 @@
 
       async function _req(method, path, body) {
         const cfg = window.__cfg || {};
-        if (!cfg.qdrantUrl) {
+        if (!cfg.qdrantProxyUrl) {
           return fallbackReq(method, path, body);
         }
 
-        const url = cfg.qdrantUrl.replace(/\/$/, "") + path;
+        const url = cfg.qdrantProxyUrl.replace(/\/$/, "") + path;
         let response;
         try {
           response = await fetch(url, {
             method,
             headers: {
-              "Content-Type": "application/json",
-              "api-key": cfg.qdrantKey || ""
+              "Content-Type": "application/json"
             },
             body: body === undefined ? undefined : JSON.stringify(body)
           });
@@ -1070,7 +1068,7 @@
             collections.add(name);
             return;
           }
-          if (!window.__cfg.qdrantUrl) {
+          if (!window.__cfg.qdrantProxyUrl) {
             collections.add(name);
             return;
           }
@@ -1986,7 +1984,7 @@
         const queryResult = await storageModule.query({});
         if (queryResult.ok) {
           renderTasks(queryResult.tasks || []);
-        } else if (window.__cfg.qdrantUrl) {
+        } else if (window.__cfg.qdrantProxyUrl) {
           toast("Не удалось загрузить задачи");
         } else {
           renderTasks(window.__tasksCache);
