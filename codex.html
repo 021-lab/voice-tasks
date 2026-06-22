@@ -1355,6 +1355,14 @@
     })();
 
     const logModule = (() => {
+      function formatLogWriteError(error) {
+        const detail = error && (error.detail || error.message) ? String(error.detail || error.message).trim() : "";
+        if (!detail) {
+          return "Не удалось записать лог";
+        }
+        return "Не удалось записать лог: " + detail.slice(0, 120);
+      }
+
       async function emit(from, to, data) {
         const entry = {
           id: crypto.randomUUID(),
@@ -1369,7 +1377,8 @@
           window.__logCache = [entry].concat(window.__logCache).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
           renderLogs(window.__logCache);
         } catch (error) {
-          toast("Не удалось записать лог");
+          console.error("[log] write failed", { entry, error });
+          toast(formatLogWriteError(error));
         }
         return entry;
       }
@@ -1718,8 +1727,19 @@
       let recognition = null;
       let activeSession = null;
 
+      function pushDebug(stage, extra) {
+        const entry = {
+          ts: Date.now(),
+          stage,
+          extra: extra || null
+        };
+        window.__receiveDebugLog = [entry].concat(Array.isArray(window.__receiveDebugLog) ? window.__receiveDebugLog : []).slice(0, 200);
+        console.debug("[receive]", stage, extra || {});
+      }
+
       function createRecognition() {
         if (!SpeechRecognitionCtor) {
+          pushDebug("createRecognition:unsupported");
           toast("SpeechRecognition недоступен");
           return null;
         }
@@ -1736,6 +1756,11 @@
         if (!activeSession) {
           return;
         }
+        pushDebug("press:abort-short", {
+          mode: activeSession.mode,
+          taskId: activeSession.taskId || null,
+          logId: activeSession.logId || null
+        });
         activeSession.shortPress = true;
         if (recognition) {
           try {
@@ -1752,6 +1777,10 @@
         if (!activeSession) {
           return;
         }
+        pushDebug("press:finish", {
+          mode: activeSession.mode,
+          transcript: activeSession.transcript || ""
+        });
         activeSession.released = true;
         if (recognition) {
           try {
@@ -1777,10 +1806,20 @@
             }
           }
           activeSession.transcript = (finalText + interimText).trim();
+          pushDebug("recognition:result", {
+            mode: activeSession.mode,
+            transcript: activeSession.transcript,
+            finalLength: finalText.trim().length,
+            interimLength: interimText.trim().length
+          });
           updateOverlayText(activeSession.transcript || "Запись…");
         };
 
-        instance.onerror = () => {
+        instance.onerror = (event) => {
+          pushDebug("recognition:error", {
+            mode: activeSession && activeSession.mode ? activeSession.mode : null,
+            error: event && event.error ? event.error : "unknown"
+          });
           hideOverlay();
           if (activeSession && !activeSession.shortPress) {
             toast("Ошибка распознавания");
@@ -1790,11 +1829,18 @@
 
         instance.onend = async () => {
           if (!activeSession) {
+            pushDebug("recognition:end:without-session");
             return;
           }
           const session = activeSession;
           activeSession = null;
           hideOverlay();
+          pushDebug("recognition:end", {
+            mode: session.mode,
+            shortPress: !!session.shortPress,
+            released: !!session.released,
+            transcript: String(session.transcript || "").trim()
+          });
 
           if (session.shortPress) {
             return;
@@ -1807,11 +1853,16 @@
           }
 
           if (session.mode === "search") {
+            pushDebug("route:search", { transcript });
             await searchModule.handleTranscript(transcript);
             return;
           }
 
           if (session.mode === "task") {
+            pushDebug("route:task", {
+              taskId: session.taskId,
+              transcript
+            });
             await extractModule.handle({
               elementType: "task",
               taskId: session.taskId,
@@ -1821,6 +1872,10 @@
           }
 
           if (session.mode === "log") {
+            pushDebug("route:log", {
+              logId: session.logId,
+              transcript
+            });
             await logModule.emit("receive", "log", {
               elementType: "log",
               taskId: null,
@@ -1843,6 +1898,12 @@
           released: false,
           shortPress: false
         }, meta);
+        pushDebug("session:start", {
+          mode: activeSession.mode,
+          taskId: activeSession.taskId || null,
+          logId: activeSession.logId || null,
+          title: activeSession.overlayTitle || ""
+        });
 
         bindCommonHandlers(recognition);
         showOverlay(meta.overlayTitle, "Запись…");
@@ -1850,6 +1911,9 @@
         try {
           recognition.start();
         } catch (_error) {
+          pushDebug("session:start-failed", {
+            mode: activeSession.mode
+          });
           hideOverlay();
           toast("Не удалось запустить запись");
           activeSession = null;
@@ -1863,12 +1927,20 @@
         element.addEventListener("touchstart", (event) => {
           event.preventDefault();
           pressedAt = Date.now();
+          pushDebug("touchstart", {
+            kind: element.dataset.kind || null,
+            taskId: element.dataset.id || null,
+            logId: element.dataset.logId || null
+          });
           startSession(metaFactory(element));
         }, { passive: false });
 
         element.addEventListener("touchend", (event) => {
           event.preventDefault();
           const delta = Date.now() - pressedAt;
+          pushDebug("touchend", {
+            delta
+          });
           if (delta < 200) {
             abortShortPress();
             if (typeof shortTapHandler === "function") {
@@ -1880,6 +1952,11 @@
         }, { passive: false });
 
         element.addEventListener("touchcancel", () => {
+          pushDebug("touchcancel", {
+            kind: element.dataset.kind || null,
+            taskId: element.dataset.id || null,
+            logId: element.dataset.logId || null
+          });
           abortShortPress();
         }, { passive: false });
       }
