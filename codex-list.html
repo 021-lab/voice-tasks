@@ -45,6 +45,8 @@
     .task-item[data-status="отложено"]{border-left-color:var(--orange)}
     .task-item[data-status="делегирована"]{border-left-color:var(--pink)}
     .task-item.flash{background:rgba(83,52,131,.5)}
+    .task-item.ptt-rec{outline:2px solid var(--danger);outline-offset:1px}
+    .log-entry.ptt-rec{outline:2px solid var(--danger);outline-offset:1px}
     .task-title{font-size:14px;font-weight:500;margin-bottom:6px;line-height:1.4}
     .task-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
     .status-badge{font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.08);color:var(--muted)}
@@ -273,10 +275,8 @@ const QdrantBackend = (() => {
   }
 
   async function getTask(id) {
-    try {
-      const r = await _req('GET', `/collections/tasks/points/${id}`);
-      return r.result ? r.result.payload : null;
-    } catch (e) { return null; }
+    const r = await _req('GET', `/collections/tasks/points/${id}`);
+    return r.result ? r.result.payload : null;
   }
 
   async function deleteTask(id) {
@@ -596,10 +596,31 @@ const extractModule = (() => {
     const t = transcript.toLowerCase().trim();
     let p = null;
 
-    if (/^удали/.test(t)) {
+    // Delete task: «удали» — but «удали тег X» removes tag, not task
+    if (/^удали\s+тег/.test(t)) {
+      const m = t.match(/^удали\s+тег[и]?\s+(.+)/);
+      if (m) p = { op: 'update', task: { id: taskId, _removeTags: m[1].trim().split(/[\s,]+/).filter(Boolean) } };
+    } else if (/^удали/.test(t)) {
       p = { op: 'delete', task: { id: taskId } };
+
+    // Archive / status shortcuts
     } else if (/^в архив/.test(t)) {
       p = { op: 'update', task: { id: taskId, status: 'архив' } };
+    } else if (/^сделано/.test(t) || /^готово/.test(t)) {
+      p = { op: 'update', task: { id: taskId, status: 'сделано' } };
+    } else if (/^в фокус/.test(t)) {
+      p = { op: 'update', task: { id: taskId, status: 'фокус' } };
+
+    // Tags: «тег важное», «добавь тег срочно», «убери тег», «убрать тег»
+    } else if (/^(?:добавь?(?:те)?|добавить|поставить|поставь?(?:те)?)?\s*тег[и]?\s+\S/.test(t)) {
+      const m = t.match(/(?:^тег[и]?|тег[и]?\s+)\s*(.+)/);
+      const raw = m ? m[1] : t.replace(/^.*?тег[и]?\s+/, '');
+      p = { op: 'update', task: { id: taskId, tags: raw.trim().split(/[\s,]+/).filter(Boolean) } };
+    } else if (/^(?:убери?(?:те)?|убрать)\s+тег/.test(t)) {
+      const m = t.match(/^(?:убери?(?:те)?|убрать)\s+тег[и]?\s+(.+)/);
+      if (m) p = { op: 'update', task: { id: taskId, _removeTags: m[1].trim().split(/[\s,]+/).filter(Boolean) } };
+
+    // Rename: «измени» / «переименуй»
     } else {
       const renM = t.match(/^(измени|переименуй)\s+(.+)/);
       if (renM) {
@@ -661,8 +682,13 @@ const receiveModule = (() => {
     let recDone = false;
     let moved = false;
     let startX = 0, startY = 0;
-    let overlayTimer = null;
+    let _recTimer = null;
     let handlingEnd = false;
+
+    function _setRec(on) {
+      if (on) el.classList.add('ptt-rec');
+      else el.classList.remove('ptt-rec');
+    }
 
     el.addEventListener('touchstart', e => {
       t0 = Date.now();
@@ -681,25 +707,22 @@ const receiveModule = (() => {
       r.onresult = ev => {
         for (let i = ev.resultIndex; i < ev.results.length; i++) {
           if (ev.results[i].isFinal) { transcript += ev.results[i][0].transcript; _interim = ''; }
-          else { _interim = ev.results[i][0].transcript; setOverlayText(_interim); }
+          else { _interim = ev.results[i][0].transcript; }
         }
       };
       r.onend = () => { recDone = true; };
       r.onerror = ev => {
         recDone = true;
+        _setRec(false);
+        clearTimeout(_recTimer);
         if (ev.error !== 'aborted') {
           toast('Ошибка записи: ' + ev.error);
           LOG.emit('receive', 'error', { error: ev.error, stage: 'speech_recognition', elementType: type, id });
         }
-        clearTimeout(overlayTimer);
-        hideOverlay();
       };
       try { r.start(); } catch (_) {}
 
-      // Show overlay only after 200ms (confirm long press)
-      overlayTimer = setTimeout(() => {
-        if (!moved) showOverlay('');
-      }, 210);
+      _recTimer = setTimeout(() => { if (!moved) _setRec(true); }, 210);
     }, { passive: true });
 
     el.addEventListener('touchmove', e => {
@@ -707,30 +730,29 @@ const receiveModule = (() => {
       const dy = Math.abs(e.touches[0].clientY - startY);
       if (dx > 12 || dy > 12) {
         moved = true;
-        clearTimeout(overlayTimer);
+        clearTimeout(_recTimer);
+        _setRec(false);
         if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
-        hideOverlay();
       }
     }, { passive: true });
 
     el.addEventListener('touchcancel', () => {
-      clearTimeout(overlayTimer);
+      clearTimeout(_recTimer);
+      _setRec(false);
       moved = true;
       if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
-      hideOverlay();
     }, { passive: true });
 
     el.addEventListener('touchend', async e => {
-      clearTimeout(overlayTimer);
+      clearTimeout(_recTimer);
       if (moved || handlingEnd) return;
       handlingEnd = true;
       const dur = Date.now() - t0;
 
       if (dur < 200) {
-        // Short tap — abort recording
         if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
         rec = null;
-        hideOverlay();
+        _setRec(false);
         handlingEnd = false;
         if (type === 'task') {
           el.classList.add('flash');
@@ -739,15 +761,13 @@ const receiveModule = (() => {
         return;
       }
 
-      // Long press — finalize recording
-      showOverlay(transcript || 'Обработка...');
       if (rec && !recDone) {
         await new Promise(resolve => {
           rec.onend = () => { recDone = true; resolve(); };
           try { rec.stop(); } catch (_) { resolve(); }
         });
       }
-      hideOverlay();
+      _setRec(false);
       rec = null;
 
       const final = (transcript || _interim).trim();
