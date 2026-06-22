@@ -1,0 +1,12 @@
+{
+  "name": "qdrant-mcp-worker",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "wrangler dev --ip 127.0.0.1 --port 4311",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.103.0"
+  }
+}

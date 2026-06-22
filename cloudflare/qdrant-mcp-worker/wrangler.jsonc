@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "qdrant-mcp-worker",
+  "account_id": "7d501365312b59f08d08b766d32d9219",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-06-22",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "toolbox.smileme.ai",
+      "custom_domain": true
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
