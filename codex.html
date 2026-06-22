@@ -1959,7 +1959,7 @@
             shortPress: !!session.shortPress,
             released: !!session.released,
             transcript: String(session.transcript || "").trim()
-          });
+          }, session.sessionId);
 
           if (session.shortPress) {
             return;
@@ -1972,7 +1972,7 @@
           }
 
           if (session.mode === "search") {
-            pushDebug("route:search", { transcript });
+            pushDebug("route:search", { transcript }, session.sessionId);
             await searchModule.handleTranscript(transcript);
             return;
           }
@@ -1981,7 +1981,7 @@
             pushDebug("route:task", {
               taskId: session.taskId,
               transcript
-            });
+            }, session.sessionId);
             await extractModule.handle({
               elementType: "task",
               taskId: session.taskId,
@@ -1994,7 +1994,7 @@
             pushDebug("route:log", {
               logId: session.logId,
               transcript
-            });
+            }, session.sessionId);
             await logModule.emit("receive", "log", {
               elementType: "log",
               taskId: null,
