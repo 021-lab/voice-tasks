@@ -83,7 +83,7 @@
   <span class="brand">🎙 VoiceTasks</span>
   <button class="btn" id="btn-undo" title="Отменить">↩ Undo</button>
   <button class="btn" id="btn-ptt">🎤 Найди/Добавь</button>
-  <button class="btn" id="btn-settings">⚙</button>
+  <button class="btn" id="btn-settings">⚙ <span id="cfg-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f87171;vertical-align:middle;margin-left:2px" title="Qdrant не настроен"></span></button>
 </header>
 
 <nav>
@@ -189,6 +189,7 @@ const settingsModule = (() => {
     const raw = localStorage.getItem('vt_env') || '';
     if (!raw.trim()) { openModal(); return; }
     window.__cfg = parseEnv(raw);
+    _updateDot();
   }
 
   function openModal() {
@@ -200,16 +201,25 @@ const settingsModule = (() => {
     document.getElementById('settings-modal').hidden = true;
   }
 
+  function _updateDot() {
+    const dot = document.getElementById('cfg-dot');
+    if (!dot) return;
+    const ok = !!(window.__cfg && window.__cfg.qdrantUrl);
+    dot.style.background = ok ? '#4ade80' : '#f87171';
+    dot.title = ok ? 'Qdrant подключён' : 'Qdrant не настроен — нажмите ⚙';
+  }
+
   function save() {
     const raw = document.getElementById('settings-textarea').value.trim();
     localStorage.setItem('vt_env', raw);
     window.__cfg = parseEnv(raw);
+    _updateDot();
     closeModal();
     toast('Настройки сохранены');
     appInit();
   }
 
-  return { init, openModal, closeModal, save };
+  return { init, openModal, closeModal, save, updateDot: _updateDot };
 })();
 
 // ─── QdrantBackend ────────────────────────────────────────────────────────────
@@ -405,9 +415,26 @@ const undoModule = (() => {
 
 // ─── logModule ────────────────────────────────────────────────────────────────
 const logModule = (() => {
+  const _LS_KEY = 'vt_log_v1';
+  const _LS_MAX = 300;
+
+  function _lsPush(entry) {
+    try {
+      const prev = JSON.parse(localStorage.getItem(_LS_KEY) || '[]');
+      prev.push(entry);
+      localStorage.setItem(_LS_KEY, JSON.stringify(prev.slice(-_LS_MAX)));
+    } catch (_) {}
+  }
+
+  function _lsLoad() {
+    try { return JSON.parse(localStorage.getItem(_LS_KEY) || '[]'); } catch (_) { return []; }
+  }
+
   async function emit(from, to, data) {
     const entry = { id: crypto.randomUUID(), ts: Date.now(), from, to, data, comment: '' };
+    console.log('[VT]', from, '->', to, JSON.stringify(data));
     window.__logCache.push(entry);
+    _lsPush(entry);
     renderLogList();
     storageModule.saveLog(entry);
   }
@@ -428,12 +455,17 @@ const logModule = (() => {
   }
 
   async function loadLogs() {
-    window.__logCache = await storageModule.getLogs();
+    const lsEntries = _lsLoad();
+    const qdEntries = await storageModule.getLogs();
+    const map = {};
+    for (const e of [...lsEntries, ...qdEntries]) map[e.id] = e;
+    window.__logCache = Object.values(map).sort((a, b) => a.ts - b.ts);
     renderLogList();
   }
 
   async function clearLogs() {
     await storageModule.clearLogs();
+    try { localStorage.removeItem(_LS_KEY); } catch (_) {}
     window.__logCache = [];
     renderLogList();
   }
@@ -710,7 +742,11 @@ const searchModule = (() => {
 
     function _mkRec() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SR) { toast('Web Speech API не поддерживается'); return null; }
+      if (!SR) {
+        toast('Web Speech API не поддерживается');
+        LOG.emit('search', 'error', { error: 'no_speech_api' });
+        return null;
+      }
       const r = new SR();
       r.lang = 'ru-RU';
       r.continuous = false;
@@ -754,7 +790,12 @@ const searchModule = (() => {
         }
       };
       try { r.start(); } catch (e) {
+        clearTimeout(_activateTimer);
+        _setRecording(false);
+        rec = null;
+        recDone = true;
         LOG.emit('search', 'error', { error: e.message || 'start_failed', stage: 'rec_start' });
+        return;
       }
       _activateTimer = setTimeout(() => { _setRecording(true); }, 210);
     }
@@ -826,8 +867,6 @@ const searchModule = (() => {
         const r = await storageModule.query({});
         if (r.ok) render(r.tasks || []);
         toast('Задача добавлена');
-      } else {
-        toast('Ошибка: ' + result.error);
       }
       return;
     }
@@ -924,6 +963,7 @@ function initTabs() {
 
 // ─── App init ─────────────────────────────────────────────────────────────────
 async function appInit() {
+  settingsModule.updateDot();
   if (!window.__cfg || !window.__cfg.qdrantUrl) return;
   try {
     const r = await storageModule.query({});
@@ -938,6 +978,8 @@ async function appInit() {
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   settingsModule.init();
+  // Load localStorage log immediately so it's visible before Qdrant
+  logModule.loadLogs();
   document.getElementById('btn-settings').addEventListener('click', () => settingsModule.openModal());
   document.getElementById('btn-save-settings').addEventListener('click', () => settingsModule.save());
   document.getElementById('btn-close-settings').addEventListener('click', () => settingsModule.closeModal());
