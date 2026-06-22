@@ -1784,7 +1784,7 @@
       const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
       let recognition = null;
       let activeSession = null;
-      let debugWriteChain = Promise.resolve();
+      let debugPendingWrites = [];
       const SOURCE_FILE = "codex.html";
       const SOURCE_MAP = {
         "touchstart": { fn: "attachLongPress.touchstart", line: 2071 },
@@ -1821,16 +1821,24 @@
       }
 
       function queueRemoteDebug(entry) {
-        debugWriteChain = debugWriteChain
-          .catch(() => null)
-          .then(() => storageModule.debug.saveReceive(entry))
+        const pending = storageModule.debug.saveReceive(entry)
           .then(() => {
             window.__receiveDebugRemoteLog = [entry].concat(Array.isArray(window.__receiveDebugRemoteLog) ? window.__receiveDebugRemoteLog : []).slice(0, 200);
           })
           .catch((error) => {
             console.warn("[receive-debug] remote write failed", { entry, error });
+          })
+          .finally(() => {
+            debugPendingWrites = debugPendingWrites.filter((item) => item !== pending);
+            window.__receiveDebugPendingCount = debugPendingWrites.length;
           });
-        return debugWriteChain;
+        debugPendingWrites.push(pending);
+        window.__receiveDebugPendingCount = debugPendingWrites.length;
+        return pending;
+      }
+
+      function flushRemoteDebug() {
+        return Promise.all(debugPendingWrites.slice()).catch(() => []);
       }
 
       function pushDebug(stage, extra, sessionId) {
@@ -1846,6 +1854,8 @@
         console.debug("[receive]", stage, extra || {});
         queueRemoteDebug(entry);
       }
+
+      window.__receiveDebugFlush = flushRemoteDebug;
 
       function createRecognition(sessionId) {
         pushDebug("recognition:create:begin", {
