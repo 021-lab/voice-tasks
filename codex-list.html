@@ -811,9 +811,10 @@ const searchModule = (() => {
 
   async function process(transcript) {
     const t = transcript.toLowerCase().trim();
+    await LOG.emit('search', 'process', { transcript });
 
     // Add
-    const addM = t.match(/^(добавь|создай|новая\s+задача)\s+(.+)/);
+    const addM = t.match(/^(добавь|добавить|создай|создать|новая?\s+задач[уа]?)\s+(.+)/);
     if (addM) {
       // Use index offset to preserve original casing (addM matched on lowercase t)
       const prefixLen = addM[0].length - addM[2].length;
@@ -856,8 +857,12 @@ const searchModule = (() => {
     }
 
     // LLM fallback
+    await LOG.emit('search', 'llm', { transcript });
     const llm = await cloudModule.interpret(transcript);
-    if (!llm) return;
+    if (!llm) {
+      LOG.emit('search', 'error', { error: 'no_match_and_llm_null', transcript });
+      return;
+    }
     if (llm.search) {
       const q = {};
       if (llm.status) q.status = llm.status;
