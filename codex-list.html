@@ -717,6 +717,8 @@ const searchModule = (() => {
       return r;
     }
 
+    let _overlayTimer = null;
+
     function start() {
       t0 = Date.now();
       transcript = '';
@@ -733,17 +735,21 @@ const searchModule = (() => {
       r.onend = () => { recDone = true; };
       r.onerror = ev => {
         recDone = true;
+        clearTimeout(_overlayTimer);
         if (ev.error !== 'aborted') {
           toast('Ошибка записи: ' + ev.error);
           LOG.emit('search', 'error', { error: ev.error, stage: 'speech_recognition' });
         }
         hideOverlay();
       };
-      try { r.start(); } catch (_) {}
-      showOverlay('');
+      try { r.start(); } catch (e) {
+        LOG.emit('search', 'error', { error: e.message || 'start_failed', stage: 'rec_start' });
+      }
+      _overlayTimer = setTimeout(() => { showOverlay(''); }, 210);
     }
 
     async function stop() {
+      clearTimeout(_overlayTimer);
       const dur = Date.now() - t0;
       if (dur < 200) {
         if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
@@ -770,6 +776,7 @@ const searchModule = (() => {
     }
 
     let _busy = false;
+    let _touchEndTime = 0;
     async function _guardedStop() {
       if (_busy) return;
       _busy = true;
@@ -777,9 +784,18 @@ const searchModule = (() => {
     }
 
     btn.addEventListener('touchstart', e => { e.preventDefault(); start(); }, { passive: false });
-    btn.addEventListener('touchend', async e => { await _guardedStop(); }, { passive: true });
-    btn.addEventListener('mousedown', e => { if (e.button !== 0) return; start(); });
-    btn.addEventListener('mouseup', async e => { if (e.button !== 0) return; await _guardedStop(); });
+    btn.addEventListener('touchend', async e => {
+      _touchEndTime = Date.now();
+      await _guardedStop();
+    }, { passive: true });
+    btn.addEventListener('mousedown', e => {
+      if (e.button !== 0 || Date.now() - _touchEndTime < 500) return;
+      start();
+    });
+    btn.addEventListener('mouseup', async e => {
+      if (e.button !== 0 || Date.now() - _touchEndTime < 500) return;
+      await _guardedStop();
+    });
   }
 
   async function process(transcript) {
