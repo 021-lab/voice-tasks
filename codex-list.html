@@ -93,8 +93,13 @@
 
 <main>
   <div id="task-panel">
+    <div style="display:flex;gap:8px;padding:4px 0 8px">
+      <input type="text" id="manual-input" placeholder="Введите задачу вручную..."
+        style="flex:1;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:13px;font-family:inherit;outline:none;-webkit-appearance:none">
+      <button class="btn" id="btn-manual-add" style="background:var(--accent2);border:none;color:#fff;font-size:18px;padding:8px 14px">+</button>
+    </div>
     <ul id="task-list" style="list-style:none"></ul>
-    <div id="empty-state">Нет задач.<br>Долгое нажатие на «Найди/Добавь» — создать задачу.</div>
+    <div id="empty-state">Нет задач.<br>Введите выше или нажмите «Найди/Добавь».</div>
   </div>
   <div id="log-panel" hidden>
     <div class="log-actions">
@@ -1001,13 +1006,11 @@ function initTabs() {
 // ─── App init ─────────────────────────────────────────────────────────────────
 async function appInit() {
   settingsModule.updateDot();
-  if (!window.__cfg || !window.__cfg.qdrantUrl) return;
   try {
     const r = await storageModule.query({});
-    render(r.tasks || []);
-    await logModule.loadLogs();
+    if (r.ok) render(r.tasks || []);
+    if (window.__cfg && window.__cfg.qdrantUrl) await logModule.loadLogs();
   } catch (e) {
-    toast('Ошибка загрузки: ' + e.message);
     LOG.emit('app', 'error', { error: e.message, stage: 'init' });
   }
 }
@@ -1046,6 +1049,23 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-undo').addEventListener('click', () => undoModule.undo());
   document.getElementById('btn-clear-log').addEventListener('click', () => logModule.clearLogs());
   document.getElementById('btn-copy-log').addEventListener('click', () => logModule.copyLogs());
+
+  async function _manualAdd() {
+    const input = document.getElementById('manual-input');
+    const title = input.value.trim();
+    if (!title) return;
+    input.value = '';
+    await LOG.emit('manual', 'storage', { op: 'add', task: { title } });
+    const result = await storageModule.patch({ op: 'add', task: { title } });
+    if (result.ok) {
+      const r = await storageModule.query({});
+      if (r.ok) render(r.tasks || []);
+      toast('Задача добавлена');
+    }
+  }
+  document.getElementById('btn-manual-add').addEventListener('click', _manualAdd);
+  document.getElementById('manual-input').addEventListener('keydown', e => { if (e.key === 'Enter') _manualAdd(); });
+
   initTabs();
   searchModule.init();
   appInit();
