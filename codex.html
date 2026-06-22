@@ -1687,7 +1687,7 @@
           toast(result.error || "Ошибка сохранения");
           return;
         }
-        renderTasks(window.__tasksCache);
+        await reloadTasksView();
       }
 
       return {
@@ -1700,7 +1700,7 @@
         const normalized = normalizeText(transcript);
         let routed = null;
 
-        const addMatch = normalized.match(/^(добавь|создай|новая задача)\s+(.+)/);
+        const addMatch = normalized.match(/^(добавь|добавить|создай|создать|новая задача|новую задачу)\s+(?:задачу\s+)?(.+)/);
         if (addMatch && addMatch[2]) {
           routed = {
             kind: "patch",
@@ -1756,7 +1756,7 @@
             toast(patchResult.error || "Ошибка сохранения");
             return;
           }
-          renderTasks(window.__tasksCache);
+          await reloadTasksView();
           return;
         }
 
@@ -2193,6 +2193,13 @@
       Array.from(dom.logList.querySelectorAll("[data-log-id]")).forEach((element) => {
         receiveModule.bindLogElement(element);
       });
+    }
+
+    async function reloadTasksView() {
+      const queryResult = await storageModule.query({});
+      if (queryResult.ok) {
+        renderTasks(queryResult.tasks || []);
+      }
     }
 
     function showTasksPanel() {
