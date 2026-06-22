@@ -702,6 +702,7 @@ const receiveModule = (() => {
 const searchModule = (() => {
   function init() {
     const btn = document.getElementById('btn-ptt');
+    const BTN_IDLE = '🎤 Найди/Добавь';
     let t0 = 0;
     let transcript = '';
     let rec = null;
@@ -717,7 +718,17 @@ const searchModule = (() => {
       return r;
     }
 
-    let _overlayTimer = null;
+    let _activateTimer = null;
+
+    function _setRecording(active) {
+      if (active) {
+        btn.textContent = '⏺ Слушаю...';
+        btn.style.background = 'var(--danger)';
+      } else {
+        btn.textContent = BTN_IDLE;
+        btn.style.background = '';
+      }
+    }
 
     function start() {
       t0 = Date.now();
@@ -729,42 +740,42 @@ const searchModule = (() => {
       r.onresult = ev => {
         for (let i = ev.resultIndex; i < ev.results.length; i++) {
           if (ev.results[i].isFinal) transcript += ev.results[i][0].transcript;
-          else setOverlayText(ev.results[i][0].transcript);
+          else btn.textContent = '⏺ ' + ev.results[i][0].transcript;
         }
       };
       r.onend = () => { recDone = true; };
       r.onerror = ev => {
         recDone = true;
-        clearTimeout(_overlayTimer);
+        clearTimeout(_activateTimer);
+        _setRecording(false);
         if (ev.error !== 'aborted') {
           toast('Ошибка записи: ' + ev.error);
           LOG.emit('search', 'error', { error: ev.error, stage: 'speech_recognition' });
         }
-        hideOverlay();
       };
       try { r.start(); } catch (e) {
         LOG.emit('search', 'error', { error: e.message || 'start_failed', stage: 'rec_start' });
       }
-      _overlayTimer = setTimeout(() => { showOverlay(''); }, 210);
+      _activateTimer = setTimeout(() => { _setRecording(true); }, 210);
     }
 
     async function stop() {
-      clearTimeout(_overlayTimer);
+      clearTimeout(_activateTimer);
       const dur = Date.now() - t0;
       if (dur < 200) {
         if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
         rec = null;
-        hideOverlay();
+        _setRecording(false);
         return;
       }
-      setOverlayText(transcript || 'Обработка...');
+      btn.textContent = '⏳ Обработка...';
       if (rec && !recDone) {
         await new Promise(resolve => {
           rec.onend = () => { recDone = true; resolve(); };
           try { rec.stop(); } catch (_) { resolve(); }
         });
       }
-      hideOverlay();
+      _setRecording(false);
       rec = null;
       const final = transcript.trim();
       if (!final) {
