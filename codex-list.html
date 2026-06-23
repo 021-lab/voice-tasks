@@ -696,33 +696,35 @@ const receiveModule = (() => {
       _interim = '';
       recDone = false;
       moved = false;
+      rec = null;
       const touch = e.touches[0];
       startX = touch.clientX;
       startY = touch.clientY;
 
-      const r = _mkRec();
-      if (!r) return;
-      rec = r;
-
-      r.onresult = ev => {
-        for (let i = ev.resultIndex; i < ev.results.length; i++) {
-          if (ev.results[i].isFinal) { transcript += ev.results[i][0].transcript; _interim = ''; }
-          else { _interim = ev.results[i][0].transcript; }
-        }
-      };
-      r.onend = () => { recDone = true; };
-      r.onerror = ev => {
-        recDone = true;
-        _setRec(false);
-        clearTimeout(_recTimer);
-        if (ev.error !== 'aborted') {
-          toast('Ошибка записи: ' + ev.error);
-          LOG.emit('receive', 'error', { error: ev.error, stage: 'speech_recognition', elementType: type, id });
-        }
-      };
-      try { r.start(); } catch (_) {}
-
-      _recTimer = setTimeout(() => { if (!moved) _setRec(true); }, 210);
+      // Delay recognition start until 200ms of stable (non-scroll) touch
+      _recTimer = setTimeout(() => {
+        if (moved) return;
+        const r = _mkRec();
+        if (!r) return;
+        rec = r;
+        r.onresult = ev => {
+          for (let i = ev.resultIndex; i < ev.results.length; i++) {
+            if (ev.results[i].isFinal) { transcript += ev.results[i][0].transcript; _interim = ''; }
+            else { _interim = ev.results[i][0].transcript; }
+          }
+        };
+        r.onend = () => { recDone = true; };
+        r.onerror = ev => {
+          recDone = true;
+          _setRec(false);
+          if (ev.error !== 'aborted') {
+            toast('Ошибка записи: ' + ev.error);
+            LOG.emit('receive', 'error', { error: ev.error, stage: 'speech_recognition', elementType: type, id });
+          }
+        };
+        try { r.start(); } catch (_) {}
+        _setRec(true);
+      }, 200);
     }, { passive: true });
 
     el.addEventListener('touchmove', e => {
