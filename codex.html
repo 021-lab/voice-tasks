@@ -1102,7 +1102,9 @@
 
       async function deleteTask(id) {
         await ensureCollection(TASKS_COLLECTION);
-        await _req("DELETE", "/collections/" + TASKS_COLLECTION + "/points/" + encodeURIComponent(id));
+        await _req("POST", "/collections/" + TASKS_COLLECTION + "/points/delete", {
+          points: [id]
+        });
         return true;
       }
 
