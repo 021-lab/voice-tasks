@@ -1924,17 +1924,19 @@
           if (!activeSession) {
             return;
           }
-          let finalText = activeSession.transcript || "";
+          let finalText = activeSession.finalTranscript || "";
           let interimText = "";
           for (let i = event.resultIndex; i < event.results.length; i += 1) {
             const piece = event.results[i][0] && event.results[i][0].transcript ? event.results[i][0].transcript : "";
             if (event.results[i].isFinal) {
               finalText += piece + " ";
             } else {
-              interimText += piece;
+              interimText += piece + " ";
             }
           }
-          activeSession.transcript = (finalText + interimText).trim();
+          activeSession.finalTranscript = finalText.trim();
+          activeSession.interimTranscript = interimText.trim();
+          activeSession.transcript = [activeSession.finalTranscript, activeSession.interimTranscript].filter(Boolean).join(" ").trim();
           pushDebug("recognition:result", {
             mode: activeSession.mode,
             transcript: activeSession.transcript,
@@ -2031,6 +2033,8 @@
 
         activeSession = Object.assign({
           transcript: "",
+          finalTranscript: "",
+          interimTranscript: "",
           released: false,
           shortPress: false
         }, meta);
