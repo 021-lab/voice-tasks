@@ -685,7 +685,7 @@
     window.__cfg = {};
     window.__tasksCache = [];
     window.__logCache = [];
-    window.__undoSnapshot = null;
+    window.__undoAction = null;
     window.__receiveDebugLog = [];
     window.__receiveDebugRemoteLog = [];
     window.__receiveDebugCollection = RECEIVE_DEBUG_COLLECTION;
@@ -1261,26 +1261,49 @@
     })();
 
     const undoModule = (() => {
-      function snapshot(tasks) {
-        window.__undoSnapshot = cloneTasks(tasks);
+      function capture(action) {
+        window.__undoAction = action ? JSON.parse(JSON.stringify(action)) : null;
       }
 
       async function restore() {
-        if (!window.__undoSnapshot) {
+        if (!window.__undoAction) {
           toast("Нечего отменять");
           return { ok: false, error: "empty" };
         }
-        const restored = cloneTasks(window.__undoSnapshot);
-        await QdrantBackend.replaceAllTasks(restored);
-        window.__tasksCache = restored;
-        window.__undoSnapshot = null;
-        await logModule.emit("undo", "storage", { restored });
-        renderTasks(window.__tasksCache);
-        return { ok: true, tasks: restored };
+        const action = JSON.parse(JSON.stringify(window.__undoAction));
+        window.__undoAction = null;
+
+        if (action.op === "add" && action.task && action.task.id) {
+          await QdrantBackend.deleteTask(action.task.id);
+          window.__tasksCache = window.__tasksCache.filter((task) => task.id !== action.task.id);
+          await logModule.emit("undo", "storage", { op: "add", task: action.task });
+          renderTasks(window.__tasksCache);
+          return { ok: true, tasks: cloneTasks(window.__tasksCache) };
+        }
+
+        if (action.op === "update" && action.before && action.before.id) {
+          const saved = await QdrantBackend.upsertTask(action.before);
+          window.__tasksCache = window.__tasksCache.map((task) => task.id === saved.id ? saved : task);
+          await logModule.emit("undo", "storage", { op: "update", task: action.before });
+          renderTasks(window.__tasksCache);
+          return { ok: true, tasks: cloneTasks(window.__tasksCache) };
+        }
+
+        if (action.op === "delete" && action.before && action.before.id) {
+          const saved = await QdrantBackend.upsertTask(action.before);
+          const exists = window.__tasksCache.some((task) => task.id === saved.id);
+          window.__tasksCache = exists ? window.__tasksCache.map((task) => task.id === saved.id ? saved : task) : [saved].concat(window.__tasksCache);
+          await logModule.emit("undo", "storage", { op: "delete", task: action.before });
+          renderTasks(window.__tasksCache);
+          return { ok: true, tasks: cloneTasks(window.__tasksCache) };
+        }
+
+        toast("Нечего отменять");
+        return { ok: false, error: "empty" };
       }
 
       return {
-        snapshot,
+        capture,
         restore
       };
     })();
@@ -1306,8 +1329,6 @@
             patch.task.id = String(patch.task.id);
           }
 
-          undoModule.snapshot(window.__tasksCache);
-
           if (patch.op === "add") {
             const task = {
               id: crypto.randomUUID(),
@@ -1317,12 +1338,18 @@
             };
             const saved = await QdrantBackend.upsertTask(task);
             window.__tasksCache = [saved].concat(window.__tasksCache);
+            undoModule.capture({ op: "add", task: saved });
             return { ok: true, task: saved, tasks: cloneTasks(window.__tasksCache) };
           }
 
           if (patch.op === "delete") {
+            const before = await QdrantBackend.getTask(patch.task.id);
+            if (!before) {
+              throw new Error("Задача не найдена");
+            }
             await QdrantBackend.deleteTask(patch.task.id);
             window.__tasksCache = window.__tasksCache.filter((task) => task.id !== patch.task.id);
+            undoModule.capture({ op: "delete", before });
             return { ok: true, tasks: cloneTasks(window.__tasksCache) };
           }
 
@@ -1349,6 +1376,7 @@
 
           const saved = await QdrantBackend.upsertTask(next);
           window.__tasksCache = window.__tasksCache.map((task) => task.id === saved.id ? saved : task);
+          undoModule.capture({ op: "update", before: current });
           return { ok: true, task: saved, tasks: cloneTasks(window.__tasksCache) };
         } catch (error) {
           return { ok: false, error: error && error.message ? error.message : "storage error" };
@@ -1982,6 +2010,14 @@
             toast("Ничего не распознано");
             return;
           }
+
+          await logModule.emit("receive", "raw", {
+            elementType: "voice",
+            taskId: session.taskId || null,
+            logId: session.logId || null,
+            mode: session.mode,
+            transcript
+          });
 
           if (session.mode === "search") {
             pushDebug("route:search", { transcript }, session.sessionId);
