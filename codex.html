@@ -2077,45 +2077,115 @@
 
       function attachLongPress(element, metaFactory, shortTapHandler) {
         let pressedAt = 0;
+        let startX = 0;
+        let startY = 0;
+        let canceledByMove = false;
+        let longPressTimer = null;
+        let pendingMeta = null;
+        const HOLD_DELAY_MS = 250;
+        const MOVE_THRESHOLD_PX = 12;
+
+        function cancelByMove(reason, point) {
+          if (canceledByMove) {
+            return;
+          }
+          canceledByMove = true;
+          if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+          }
+          pushDebug("gesture:cancel", {
+            reason,
+            startX,
+            startY,
+            currentX: point && typeof point.x === "number" ? point.x : null,
+            currentY: point && typeof point.y === "number" ? point.y : null
+          }, pendingMeta && pendingMeta.sessionId ? pendingMeta.sessionId : null);
+        }
 
         element.addEventListener("touchstart", (event) => {
-          event.preventDefault();
           pressedAt = Date.now();
-          const meta = metaFactory(element);
-          meta.sessionId = meta.sessionId || crypto.randomUUID();
+          canceledByMove = false;
+          pendingMeta = metaFactory(element);
+          pendingMeta.sessionId = pendingMeta.sessionId || crypto.randomUUID();
+          const touch = event.touches && event.touches[0] ? event.touches[0] : null;
+          startX = touch ? touch.clientX : 0;
+          startY = touch ? touch.clientY : 0;
           pushDebug("touchstart", {
             kind: element.dataset.kind || null,
-            taskId: meta.taskId || null,
-            logId: meta.logId || null,
-            targetId: element.id || null
-          }, meta.sessionId);
-          startSession(meta);
-        }, { passive: false });
+            taskId: pendingMeta.taskId || null,
+            logId: pendingMeta.logId || null,
+            targetId: element.id || null,
+            x: startX,
+            y: startY
+          }, pendingMeta.sessionId);
+
+          longPressTimer = setTimeout(() => {
+            longPressTimer = null;
+            if (canceledByMove || !pendingMeta) {
+              return;
+            }
+            startSession(pendingMeta);
+          }, HOLD_DELAY_MS);
+        }, { passive: true });
+
+        element.addEventListener("touchmove", (event) => {
+          const touch = event.touches && event.touches[0] ? event.touches[0] : null;
+          if (!touch) {
+            return;
+          }
+          const dx = Math.abs(touch.clientX - startX);
+          const dy = Math.abs(touch.clientY - startY);
+          if (dx > MOVE_THRESHOLD_PX || dy > MOVE_THRESHOLD_PX) {
+            cancelByMove("swipe", {
+              x: touch.clientX,
+              y: touch.clientY
+            });
+          }
+        }, { passive: true });
 
         element.addEventListener("touchend", (event) => {
-          event.preventDefault();
+          if (canceledByMove) {
+            pendingMeta = null;
+            return;
+          }
+          if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+          }
           const delta = Date.now() - pressedAt;
           pushDebug("touchend", {
             delta
-          });
-          if (delta < 200) {
+          }, pendingMeta && pendingMeta.sessionId ? pendingMeta.sessionId : null);
+          if (delta < HOLD_DELAY_MS) {
             abortShortPress();
             if (typeof shortTapHandler === "function") {
               shortTapHandler(element);
             }
+            pendingMeta = null;
             return;
           }
           finishPress();
-        }, { passive: false });
+          pendingMeta = null;
+        }, { passive: true });
 
         element.addEventListener("touchcancel", () => {
+          if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+          }
+          if (canceledByMove) {
+            pendingMeta = null;
+            return;
+          }
           pushDebug("touchcancel", {
             kind: element.dataset.kind || null,
             taskId: element.dataset.id || null,
             logId: element.dataset.logId || null
           });
           abortShortPress();
-        }, { passive: false });
+          pendingMeta = null;
+        }, { passive: true });
       }
 
       function bindTaskElement(element) {
