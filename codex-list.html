@@ -141,7 +141,7 @@
 window.__cfg = {};
 window.__tasksCache = [];
 window.__logCache = [];
-window.__undoSnapshot = null;
+window.__undoHistory = [];
 
 const STATUSES = ['сегодня','фокус','жду','архив','сделано','отложено','делегирована'];
 const STATUS_ICON = {
@@ -432,22 +432,22 @@ const storageModule = (() => {
 // ─── undoModule ───────────────────────────────────────────────────────────────
 const undoModule = (() => {
   function snapshot(tasks) {
-    window.__undoSnapshot = JSON.parse(JSON.stringify(tasks || []));
+    window.__undoHistory.push(JSON.parse(JSON.stringify(tasks || [])));
   }
 
   async function undo() {
-    if (!window.__undoSnapshot) { toast('Нечего отменять'); return; }
-    const snap = window.__undoSnapshot;
-    window.__undoSnapshot = null;
+    if (!window.__undoHistory.length) { toast('Нечего отменять'); return; }
+    const snap = window.__undoHistory.pop();
     try {
       const b = (window.__cfg && window.__cfg.qdrantUrl) ? QdrantBackend : LocalBackend;
       const cur = await b.scrollTasks();
       for (const t of cur) await b.deleteTask(t.id);
       for (const t of snap) await b.upsertTask(t);
-      await LOG.emit('undo', 'storage', { restored: snap });
+      await LOG.emit('undo', 'storage', { restored: snap, remaining: window.__undoHistory.length });
       render(snap);
-      toast('Изменения отменены');
+      toast(`Изменения отменены${window.__undoHistory.length ? ` (ещё ${window.__undoHistory.length})` : ''}`);
     } catch (e) {
+      window.__undoHistory.push(snap);
       toast('Ошибка undo: ' + e.message);
     }
   }
