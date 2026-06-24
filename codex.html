@@ -1859,7 +1859,7 @@
             return { ok: false, error: "empty" };
           }
 
-          if (parsed.kind === "search") {
+          if (parsed.kind === "search" || parsed.kind === "btn-ptt") {
             await searchModule.handleTranscript(text);
             return { ok: true };
           }
