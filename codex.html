@@ -1986,17 +1986,31 @@
           let startX = 0;
           let startY = 0;
           let touchSuppressed = false;
+          let holdTimer = null;
+          let sessionStarted = false;
+
+          const beginHold = () => {
+            if (moved || sessionStarted) {
+              return;
+            }
+            sessionStarted = true;
+            startSession(getVoiceMeta(actionId, element));
+          };
 
           element.addEventListener("touchstart", (event) => {
             const touch = event.touches && event.touches[0] ? event.touches[0] : null;
             pressedAt = Date.now();
             moved = false;
             touchSuppressed = false;
+            sessionStarted = false;
+            if (holdTimer) {
+              clearTimeout(holdTimer);
+            }
             if (touch) {
               startX = touch.clientX;
               startY = touch.clientY;
             }
-            startSession(getVoiceMeta(actionId, element));
+            holdTimer = setTimeout(beginHold, 200);
           }, { passive: true });
 
           element.addEventListener("touchmove", (event) => {
@@ -2009,16 +2023,24 @@
             if (dx > 12 || dy > 12) {
               moved = true;
               touchSuppressed = true;
+              if (holdTimer) {
+                clearTimeout(holdTimer);
+                holdTimer = null;
+              }
               abortShortPress();
             }
           }, { passive: true });
 
           element.addEventListener("touchend", () => {
             const delta = Date.now() - pressedAt;
+            if (holdTimer) {
+              clearTimeout(holdTimer);
+              holdTimer = null;
+            }
             if (moved) {
               return;
             }
-            if (delta < 200) {
+            if (delta < 200 || !sessionStarted) {
               abortShortPress();
               touchSuppressed = true;
               flashElement(element);
@@ -2029,6 +2051,10 @@
           }, { passive: true });
 
           element.addEventListener("touchcancel", () => {
+            if (holdTimer) {
+              clearTimeout(holdTimer);
+              holdTimer = null;
+            }
             abortShortPress();
           }, { passive: true });
 
