@@ -41,15 +41,18 @@ LLM_MODEL=anthropic/claude-haiku-4-5-20251001
 index.html
 ├── [HTML + CSS]
 └── [JS-модули inline]
+    ├── inputModule      — единая точка приёма всех действий пользователя (жесты + voice)
+    ├── interpreterModule — интерпретирует (elementId, input) → модули
     ├── settingsModule   — .env textarea → localStorage['vt_env'] → window.__cfg
     ├── storageModule    — единственная точка доступа к данным (делегирует в StorageBackend)
-    ├── searchModule     — PTT на «Найди/Добавь»: add или search (контекст-свободно)
-    ├── receiveModule    — PTT на задаче/элементе лога → ContextInput (контекстно)
-    ├── extractModule    — regex-парсер команд над существующей задачей
+    ├── searchModule     — интерпретация ввода для поиска/добавления
+    ├── extractModule    — интерпретация ввода для изменения задач (regex-парсер)
     ├── cloudModule      — LLM-фоллбэк когда regex не справился
     ├── logModule        — лог межмодульных передач + голосовые комментарии
     └── undoModule       — один уровень undo (снапшот TaskItem[])
 ```
+
+**Стандарт приёма ввода:** см. [`INPUT_HANDLING_STANDARD.md`](./INPUT_HANDLING_STANDARD.md) — маркировка элементов через `agent-action-id`, единая точка обработки жестов, фиксированный контракт интерпретатора, тестовый хук `window.__agentInvoke`.
 
 ---
 
