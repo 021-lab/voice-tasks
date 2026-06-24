@@ -84,14 +84,14 @@
 
 <header>
   <span class="brand">🎙 VoiceTasks</span>
-  <button class="btn" id="btn-undo" title="Отменить">↩ Undo</button>
-  <button class="btn" id="btn-ptt">🎤 Найди/Добавь</button>
-  <button class="btn" id="btn-settings">⚙ <span id="cfg-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f87171;vertical-align:middle;margin-left:2px" title="Qdrant не настроен"></span></button>
+  <button class="btn" id="btn-undo" agent-action-id="btn-undo" title="Отменить">↩ Undo</button>
+  <button class="btn" id="btn-ptt" agent-action-id="btn-ptt">🎤 Найди/Добавь</button>
+  <button class="btn" id="btn-settings" agent-action-id="btn-settings">⚙ <span id="cfg-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f87171;vertical-align:middle;margin-left:2px" title="Qdrant не настроен"></span></button>
 </header>
 
 <nav>
-  <button class="tab-btn active" id="tab-tasks">Задачи</button>
-  <button class="tab-btn" id="tab-log">Лог</button>
+  <button class="tab-btn active" id="tab-tasks" agent-action-id="tab-tasks">Задачи</button>
+  <button class="tab-btn" id="tab-log" agent-action-id="tab-log">Лог</button>
 </nav>
 
 <main>
@@ -99,15 +99,15 @@
     <div style="display:flex;gap:8px;padding:4px 0 8px">
       <input type="text" id="manual-input" placeholder="Введите задачу вручную..."
         style="flex:1;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:13px;font-family:inherit;outline:none;-webkit-appearance:none">
-      <button class="btn" id="btn-manual-add" style="background:var(--accent2);border:none;color:#fff;font-size:18px;padding:8px 14px">+</button>
+      <button class="btn" id="btn-manual-add" agent-action-id="btn-manual-add" style="background:var(--accent2);border:none;color:#fff;font-size:18px;padding:8px 14px">+</button>
     </div>
     <ul id="task-list" style="list-style:none"></ul>
     <div id="empty-state">Нет задач.<br>Введите выше или нажмите «Найди/Добавь».</div>
   </div>
   <div id="log-panel" hidden>
     <div class="log-actions">
-      <button class="btn" id="btn-clear-log">Очистить лог</button>
-      <button class="btn" id="btn-copy-log">Копировать</button>
+      <button class="btn" id="btn-clear-log" agent-action-id="btn-clear-log">Очистить лог</button>
+      <button class="btn" id="btn-copy-log" agent-action-id="btn-copy-log">Копировать</button>
     </div>
     <ul id="log-list" style="list-style:none"></ul>
   </div>
@@ -128,9 +128,9 @@
     <textarea id="settings-textarea" rows="8" autocomplete="off" autocorrect="off" spellcheck="false"
       placeholder="QDRANT_URL=https://xxx.qdrant.io&#10;QDRANT_KEY=abc123&#10;LLM_PROVIDER=openrouter&#10;LLM_KEY=sk-or-...&#10;LLM_MODEL=anthropic/claude-haiku-4-5-20251001"></textarea>
     <div class="dialog-btns">
-      <button class="btn" id="btn-test-qdrant">Тест связи</button>
-      <button class="btn" id="btn-close-settings">Отмена</button>
-      <button class="btn" id="btn-save-settings">Сохранить</button>
+      <button class="btn" id="btn-test-qdrant" agent-action-id="btn-test-qdrant">Тест связи</button>
+      <button class="btn" id="btn-close-settings" agent-action-id="btn-close-settings">Отмена</button>
+      <button class="btn" id="btn-save-settings" agent-action-id="btn-save-settings">Сохранить</button>
     </div>
   </div>
 </div>
@@ -143,6 +143,12 @@ window.__cfg = {};
 window.__tasksCache = [];
 window.__logCache = [];
 window.__undoHistory = [];
+// AGENT TEST HOOK: тестирующий агент может вызывать интерпретатор напрямую,
+// минуя touch-события, для эмуляции действий пользователя.
+// Пример: window.__agentInvoke('task-{uuid}', { type: 'click' })
+//         window.__agentInvoke('task-{uuid}', { type: 'transcription', text: 'перенеси в архив' })
+//         window.__agentInvoke('btn-ptt', { type: 'transcription', text: 'добавь позвонить врачу' })
+window.__agentInvoke = null; // инициализируется в DOMContentLoaded
 
 const STATUSES = ['сегодня','фокус','жду','архив','сделано','отложено','делегирована'];
 const STATUS_ICON = {
@@ -488,12 +494,13 @@ const logModule = (() => {
     [...window.__logCache].reverse().forEach(entry => {
       const li = document.createElement('li');
       li.className = 'log-entry';
+      li.setAttribute('agent-action-id', 'log-' + entry.id);
       li.dataset.logId = entry.id;
       li.innerHTML = `<span class="log-ft">[${escHtml(entry.from)}→${escHtml(entry.to)}]</span>` +
         `<span class="log-data">${escHtml(JSON.stringify(entry.data))}</span>` +
         (entry.comment ? `<span class="log-comment">💬 ${escHtml(entry.comment)}</span>` : '');
       ul.appendChild(li);
-      receiveModule.attachPTT(li, 'log', entry.id);
+      inputModule.bind(li);
     });
   }
 
@@ -663,64 +670,57 @@ const extractModule = (() => {
   return { handle };
 })();
 
-// ─── receiveModule ────────────────────────────────────────────────────────────
-const receiveModule = (() => {
+// ─── inputModule — единая точка приёма всех действий пользователя ─────────────
+const inputModule = (() => {
   function _mkRec() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return null;
     const r = new SR();
-    r.lang = 'ru-RU';
-    r.continuous = false;
-    r.interimResults = true;
+    r.lang = 'ru-RU'; r.continuous = false; r.interimResults = true;
     return r;
   }
 
-  function attachPTT(el, type, id) {
-    let t0 = 0;
-    let transcript = '';
-    let _interim = '';
-    let rec = null;
-    let recDone = false;
-    let moved = false;
-    let startX = 0, startY = 0;
-    let _recTimer = null;
-    let handlingEnd = false;
+  // Привязывает жестовый обработчик к элементу; читает agent-action-id сам,
+  // никаких дополнительных параметров не требует.
+  function bind(el) {
+    const elementId = el.getAttribute('agent-action-id');
+    if (!elementId) return;
 
+    let t0 = 0, transcript = '', _interim = '';
+    let rec = null, recDone = false;
+    let moved = false, startX = 0, startY = 0;
+    let _recTimer = null, handlingEnd = false, _touchEndTime = 0;
+
+    // Показывает оверлей записи + outline на элементе
     function _setRec(on) {
-      if (on) el.classList.add('ptt-rec');
-      else el.classList.remove('ptt-rec');
+      if (on) { el.classList.add('ptt-rec'); showOverlay(''); }
+      else     { el.classList.remove('ptt-rec'); hideOverlay(); }
     }
 
+    // Touch: запись стартует только после 200мс без сдвига (не блокирует скролл)
     el.addEventListener('touchstart', e => {
-      t0 = Date.now();
-      transcript = '';
-      _interim = '';
-      recDone = false;
-      moved = false;
-      rec = null;
+      t0 = Date.now(); transcript = ''; _interim = '';
+      recDone = false; moved = false; rec = null;
       const touch = e.touches[0];
-      startX = touch.clientX;
-      startY = touch.clientY;
+      startX = touch.clientX; startY = touch.clientY;
 
-      // Delay recognition start until 200ms of stable (non-scroll) touch
       _recTimer = setTimeout(() => {
         if (moved) return;
         const r = _mkRec();
-        if (!r) return;
+        if (!r) { toast('Web Speech API не поддерживается'); return; }
         rec = r;
         r.onresult = ev => {
           for (let i = ev.resultIndex; i < ev.results.length; i++) {
             if (ev.results[i].isFinal) { transcript += ev.results[i][0].transcript; _interim = ''; }
-            else { _interim = ev.results[i][0].transcript; }
+            else { _interim = ev.results[i][0].transcript; setOverlayText(_interim); }
           }
         };
         r.onend = () => { recDone = true; };
         r.onerror = ev => {
-          recDone = true;
-          _setRec(false);
+          recDone = true; _setRec(false);
           if (ev.error !== 'aborted') {
             toast('Ошибка записи: ' + ev.error);
-            LOG.emit('receive', 'error', { error: ev.error, stage: 'speech_recognition', elementType: type, id });
+            LOG.emit('input', 'error', { error: ev.error, elementId });
           }
         };
         try { r.start(); } catch (_) {}
@@ -732,201 +732,106 @@ const receiveModule = (() => {
       const dx = Math.abs(e.touches[0].clientX - startX);
       const dy = Math.abs(e.touches[0].clientY - startY);
       if (dx > 12 || dy > 12) {
-        moved = true;
-        clearTimeout(_recTimer);
-        _setRec(false);
+        moved = true; clearTimeout(_recTimer); _setRec(false);
         if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
       }
     }, { passive: true });
 
     el.addEventListener('touchcancel', () => {
-      clearTimeout(_recTimer);
-      _setRec(false);
-      moved = true;
+      clearTimeout(_recTimer); _setRec(false); moved = true;
       if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
     }, { passive: true });
 
-    el.addEventListener('touchend', async e => {
+    el.addEventListener('touchend', async () => {
+      _touchEndTime = Date.now();
       clearTimeout(_recTimer);
       if (moved || handlingEnd) return;
       handlingEnd = true;
       const dur = Date.now() - t0;
 
       if (dur < 200) {
+        // Короткий тап — клик
         if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
-        rec = null;
-        _setRec(false);
+        rec = null; _setRec(false);
+        el.classList.add('flash');
+        setTimeout(() => el.classList.remove('flash'), 1000);
+        interpreterModule.handle(elementId, { type: 'click' });
         handlingEnd = false;
-        if (type === 'task') {
-          el.classList.add('flash');
-          setTimeout(() => el.classList.remove('flash'), 500);
-        }
         return;
       }
 
+      // Долгое нажатие — ждём окончания распознавания
       if (rec && !recDone) {
         await new Promise(resolve => {
           rec.onend = () => { recDone = true; resolve(); };
           try { rec.stop(); } catch (_) { resolve(); }
         });
       }
-      _setRec(false);
-      rec = null;
+      _setRec(false); rec = null;
 
       const final = (transcript || _interim).trim();
+      await LOG.emit('input', 'raw', { text: final || '(пусто)', elementId, dur,
+        finalUsed: !!transcript, interimUsed: !transcript && !!_interim });
+
       if (!final) {
         toast('Ничего не записано');
-        LOG.emit('receive', 'error', { error: 'empty_transcript', elementType: type, id });
-        return;
+        handlingEnd = false; return;
       }
-
       try {
-        if (type === 'task') {
-          await extractModule.handle({ taskId: id, transcript: final });
-        } else {
-          await LOG.emit('receive', 'log', { elementType: 'log', logId: id, transcript: final });
-          await logModule.updateComment(id, final);
-          toast('Комментарий добавлен');
-        }
-      } finally {
-        handlingEnd = false;
-      }
+        await interpreterModule.handle(elementId, { type: 'transcription', text: final });
+      } finally { handlingEnd = false; }
     }, { passive: true });
+
+    // Mouse-фоллбэк для десктопного тестирования; игнорирует призрачные события после touch
+    let _mt0 = 0, _mRec = null, _mDone = false, _mTr = '', _mIn = '', _mTimer = null, _mBusy = false;
+
+    el.addEventListener('mousedown', e => {
+      if (e.button !== 0 || Date.now() - _touchEndTime < 500) return;
+      _mt0 = Date.now(); _mTr = ''; _mIn = ''; _mDone = false; _mRec = null;
+      _mTimer = setTimeout(() => {
+        const r = _mkRec(); if (!r) return;
+        _mRec = r;
+        r.onresult = ev => {
+          for (let i = ev.resultIndex; i < ev.results.length; i++) {
+            if (ev.results[i].isFinal) { _mTr += ev.results[i][0].transcript; _mIn = ''; }
+            else { _mIn = ev.results[i][0].transcript; setOverlayText(_mIn); }
+          }
+        };
+        r.onend = () => { _mDone = true; };
+        r.onerror = ev => { _mDone = true; _setRec(false); if (ev.error !== 'aborted') toast('Ошибка: ' + ev.error); };
+        try { r.start(); } catch (_) {}
+        _setRec(true);
+      }, 200);
+    });
+
+    el.addEventListener('mouseup', async e => {
+      if (e.button !== 0 || Date.now() - _touchEndTime < 500 || _mBusy) return;
+      _mBusy = true; clearTimeout(_mTimer);
+      const dur = Date.now() - _mt0;
+      if (dur < 200) {
+        if (_mRec && !_mDone) { try { _mRec.abort(); } catch (_) {} }
+        _mRec = null; _setRec(false);
+        el.classList.add('flash');
+        setTimeout(() => el.classList.remove('flash'), 1000);
+        interpreterModule.handle(elementId, { type: 'click' });
+        _mBusy = false; return;
+      }
+      if (_mRec && !_mDone) {
+        await new Promise(resolve => { _mRec.onend = () => { _mDone = true; resolve(); }; try { _mRec.stop(); } catch (_) { resolve(); } });
+      }
+      _setRec(false); _mRec = null;
+      const final = (_mTr || _mIn).trim();
+      if (!final) { toast('Ничего не записано'); _mBusy = false; return; }
+      try { await interpreterModule.handle(elementId, { type: 'transcription', text: final }); }
+      finally { _mBusy = false; }
+    });
   }
 
-  return { attachPTT };
+  return { bind };
 })();
 
 // ─── searchModule ─────────────────────────────────────────────────────────────
 const searchModule = (() => {
-  function init() {
-    const btn = document.getElementById('btn-ptt');
-    const BTN_IDLE = '🎤 Найди/Добавь';
-    let t0 = 0;
-    let transcript = '';
-    let _interim = '';
-    let rec = null;
-    let recDone = false;
-
-    function _mkRec() {
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SR) {
-        toast('Web Speech API не поддерживается');
-        LOG.emit('search', 'error', { error: 'no_speech_api' });
-        return null;
-      }
-      const r = new SR();
-      r.lang = 'ru-RU';
-      r.continuous = false;
-      r.interimResults = true;
-      return r;
-    }
-
-    let _activateTimer = null;
-
-    function _setRecording(active) {
-      if (active) {
-        btn.textContent = '⏺ Слушаю...';
-        btn.style.background = 'var(--danger)';
-      } else {
-        btn.textContent = BTN_IDLE;
-        btn.style.background = '';
-      }
-    }
-
-    function start() {
-      t0 = Date.now();
-      transcript = '';
-      _interim = '';
-      recDone = false;
-      const r = _mkRec();
-      if (!r) return;
-      rec = r;
-      r.onresult = ev => {
-        for (let i = ev.resultIndex; i < ev.results.length; i++) {
-          if (ev.results[i].isFinal) {
-            transcript += ev.results[i][0].transcript;
-            _interim = '';
-          } else {
-            _interim = ev.results[i][0].transcript;
-            btn.textContent = '⏺ ' + _interim;
-          }
-        }
-      };
-      r.onend = () => { recDone = true; };
-      r.onerror = ev => {
-        recDone = true;
-        clearTimeout(_activateTimer);
-        _setRecording(false);
-        if (ev.error !== 'aborted') {
-          toast('Ошибка записи: ' + ev.error);
-          LOG.emit('search', 'error', { error: ev.error, stage: 'speech_recognition' });
-        }
-      };
-      try { r.start(); } catch (e) {
-        clearTimeout(_activateTimer);
-        _setRecording(false);
-        rec = null;
-        recDone = true;
-        LOG.emit('search', 'error', { error: e.message || 'start_failed', stage: 'rec_start' });
-        return;
-      }
-      _activateTimer = setTimeout(() => { _setRecording(true); }, 210);
-    }
-
-    async function stop() {
-      clearTimeout(_activateTimer);
-      const dur = Date.now() - t0;
-      if (dur < 200) {
-        if (rec && !recDone) { try { rec.abort(); } catch (_) {} }
-        rec = null;
-        _setRecording(false);
-        return;
-      }
-      btn.textContent = '⏳ Обработка...';
-      if (rec && !recDone) {
-        await new Promise(resolve => {
-          rec.onend = () => { recDone = true; resolve(); };
-          try { rec.stop(); } catch (_) { resolve(); }
-        });
-      }
-      _setRecording(false);
-      rec = null;
-
-      // If API didn't deliver a final result, fall back to last interim
-      const raw = (transcript || _interim).trim();
-      await LOG.emit('search', 'raw', { text: raw || '(пусто)', dur, finalUsed: !!transcript, interimUsed: !transcript && !!_interim });
-
-      if (!raw) {
-        toast('Ничего не записано');
-        return;
-      }
-      await process(raw);
-    }
-
-    let _busy = false;
-    let _touchEndTime = 0;
-    async function _guardedStop() {
-      if (_busy) return;
-      _busy = true;
-      try { await stop(); } finally { _busy = false; }
-    }
-
-    btn.addEventListener('touchstart', e => { e.preventDefault(); start(); }, { passive: false });
-    btn.addEventListener('touchend', async e => {
-      _touchEndTime = Date.now();
-      await _guardedStop();
-    }, { passive: true });
-    btn.addEventListener('mousedown', e => {
-      if (e.button !== 0 || Date.now() - _touchEndTime < 500) return;
-      start();
-    });
-    btn.addEventListener('mouseup', async e => {
-      if (e.button !== 0 || Date.now() - _touchEndTime < 500) return;
-      await _guardedStop();
-    });
-  }
-
   async function process(transcript) {
     const t = transcript.toLowerCase().trim();
 
@@ -995,7 +900,85 @@ const searchModule = (() => {
     }
   }
 
-  return { init };
+  return { process };
+})();
+
+// ─── interpreterModule — маршрутизирует (elementId, input) к модулям ──────────
+const interpreterModule = (() => {
+  async function handle(elementId, input) {
+    if (input.type === 'click') {
+      if (elementId === 'btn-undo') {
+        undoModule.undo();
+      } else if (elementId === 'btn-settings') {
+        settingsModule.openModal();
+      } else if (elementId === 'tab-tasks') {
+        document.getElementById('task-panel').hidden = false;
+        document.getElementById('log-panel').hidden = true;
+        document.getElementById('tab-tasks').classList.add('active');
+        document.getElementById('tab-log').classList.remove('active');
+      } else if (elementId === 'tab-log') {
+        document.getElementById('task-panel').hidden = true;
+        document.getElementById('log-panel').hidden = false;
+        document.getElementById('tab-tasks').classList.remove('active');
+        document.getElementById('tab-log').classList.add('active');
+        logModule.renderLogList();
+      } else if (elementId === 'btn-clear-log') {
+        logModule.clearLogs();
+      } else if (elementId === 'btn-copy-log') {
+        logModule.copyLogs();
+      } else if (elementId === 'btn-manual-add') {
+        const inp = document.getElementById('manual-input');
+        const title = inp.value.trim();
+        if (!title) return;
+        inp.value = '';
+        await LOG.emit('manual', 'storage', { op: 'add', task: { title } });
+        const result = await storageModule.patch({ op: 'add', task: { title } });
+        if (result.ok) {
+          const r = await storageModule.query({});
+          if (r.ok) render(r.tasks || []);
+          toast('Задача добавлена');
+        }
+      } else if (elementId === 'btn-save-settings') {
+        settingsModule.save();
+      } else if (elementId === 'btn-close-settings') {
+        settingsModule.closeModal();
+      } else if (elementId === 'btn-test-qdrant') {
+        const url = window.__cfg && window.__cfg.qdrantUrl;
+        if (!url) { toast('QDRANT_URL не настроен'); return; }
+        const btn = document.getElementById('btn-test-qdrant');
+        btn.textContent = '...';
+        try {
+          const res = await fetch(url.replace(/\/$/, '') + '/collections', {
+            headers: { 'api-key': window.__cfg.qdrantKey || '' }
+          });
+          if (res.ok) {
+            const d = await res.json();
+            toast('✓ Qdrant OK: ' + (d.result?.collections?.length || 0) + ' коллекций');
+          } else {
+            toast('HTTP ' + res.status + ' — проверьте ключ');
+          }
+        } catch (e) {
+          toast('Нет связи: ' + e.message);
+          LOG.emit('settings', 'error', { error: e.message });
+        } finally { btn.textContent = 'Тест связи'; }
+      }
+    } else if (input.type === 'transcription') {
+      const text = input.text;
+      if (elementId === 'btn-ptt') {
+        await searchModule.process(text);
+      } else if (elementId.startsWith('task-')) {
+        const taskId = elementId.slice(5);
+        await extractModule.handle({ taskId, transcript: text });
+      } else if (elementId.startsWith('log-')) {
+        const logId = elementId.slice(4);
+        await LOG.emit('receive', 'log', { elementType: 'log', logId, transcript: text });
+        await logModule.updateComment(logId, text);
+        toast('Комментарий добавлен');
+      }
+    }
+  }
+
+  return { handle };
 })();
 
 // ─── render ───────────────────────────────────────────────────────────────────
@@ -1009,6 +992,7 @@ function render(tasks) {
   tasks.forEach(task => {
     const li = document.createElement('li');
     li.className = 'task-item';
+    li.setAttribute('agent-action-id', 'task-' + task.id);
     li.dataset.taskId = task.id;
     li.dataset.status = task.status || 'сегодня';
     const icon = STATUS_ICON[task.status] || '📋';
@@ -1016,24 +1000,7 @@ function render(tasks) {
     li.innerHTML = `<div class="task-title">${icon} ${escHtml(task.title)}</div>` +
       `<div class="task-meta"><span class="status-badge">${escHtml(task.status || 'сегодня')}</span>${tags}</div>`;
     ul.appendChild(li);
-    receiveModule.attachPTT(li, 'task', task.id);
-  });
-}
-
-// ─── Tabs ─────────────────────────────────────────────────────────────────────
-function initTabs() {
-  document.getElementById('tab-tasks').addEventListener('click', () => {
-    document.getElementById('task-panel').hidden = false;
-    document.getElementById('log-panel').hidden = true;
-    document.getElementById('tab-tasks').classList.add('active');
-    document.getElementById('tab-log').classList.remove('active');
-  });
-  document.getElementById('tab-log').addEventListener('click', () => {
-    document.getElementById('task-panel').hidden = true;
-    document.getElementById('log-panel').hidden = false;
-    document.getElementById('tab-tasks').classList.remove('active');
-    document.getElementById('tab-log').classList.add('active');
-    logModule.renderLogList();
+    inputModule.bind(li);
   });
 }
 
@@ -1052,56 +1019,32 @@ async function appInit() {
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   settingsModule.init();
-  // Load localStorage log immediately so it's visible before Qdrant
   logModule.loadLogs();
-  document.getElementById('btn-settings').addEventListener('click', () => settingsModule.openModal());
-  document.getElementById('btn-save-settings').addEventListener('click', () => settingsModule.save());
-  document.getElementById('btn-close-settings').addEventListener('click', () => settingsModule.closeModal());
-  document.getElementById('btn-test-qdrant').addEventListener('click', async () => {
-    const url = window.__cfg && window.__cfg.qdrantUrl;
-    if (!url) { toast('QDRANT_URL не настроен'); return; }
-    const btn = document.getElementById('btn-test-qdrant');
-    btn.textContent = '...';
-    try {
-      const res = await fetch(url.replace(/\/$/, '') + '/collections', {
-        headers: { 'api-key': window.__cfg.qdrantKey || '' }
-      });
-      if (res.ok) {
-        const d = await res.json();
-        toast('✓ Qdrant OK: ' + (d.result?.collections?.length || 0) + ' коллекций');
-      } else {
-        toast('HTTP ' + res.status + ' — проверьте ключ');
-      }
-    } catch (e) {
-      toast('Нет связи: ' + e.message);
-      LOG.emit('settings', 'error', { error: e.message, url: url.slice(0, 40) });
-    } finally { btn.textContent = 'Тест связи'; }
+
+  // Привязываем все интерактивные элементы через единый inputModule
+  [
+    'btn-undo', 'btn-ptt', 'btn-settings',
+    'tab-tasks', 'tab-log',
+    'btn-clear-log', 'btn-copy-log', 'btn-manual-add',
+    'btn-save-settings', 'btn-close-settings', 'btn-test-qdrant'
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) inputModule.bind(el);
   });
+
+  // Клик по фону модалки (не элемент управления, обрабатывается напрямую)
   document.getElementById('settings-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('settings-modal')) settingsModule.closeModal();
   });
-  document.getElementById('btn-undo').addEventListener('click', () => undoModule.undo());
-  document.getElementById('btn-clear-log').addEventListener('click', () => logModule.clearLogs());
-  document.getElementById('btn-copy-log').addEventListener('click', () => logModule.copyLogs());
 
-  async function _manualAdd() {
-    const input = document.getElementById('manual-input');
-    const title = input.value.trim();
-    if (!title) return;
-    input.value = '';
-    await LOG.emit('manual', 'storage', { op: 'add', task: { title } });
-    const result = await storageModule.patch({ op: 'add', task: { title } });
-    if (result.ok) {
-      const r = await storageModule.query({});
-      if (r.ok) render(r.tasks || []);
-      toast('Задача добавлена');
-    }
-  }
-  document.getElementById('btn-manual-add').addEventListener('click', _manualAdd);
-  document.getElementById('manual-input').addEventListener('keydown', e => { if (e.key === 'Enter') _manualAdd(); });
+  // Enter в текстовом поле ручного ввода
+  document.getElementById('manual-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') interpreterModule.handle('btn-manual-add', { type: 'click' });
+  });
 
-  initTabs();
-  searchModule.init();
+  // Инициализируем тестовый хук интерпретатора
+  window.__agentInvoke = (elementId, input) => interpreterModule.handle(elementId, input);
+
   appInit();
 });
 </script>
