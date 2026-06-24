@@ -60,13 +60,8 @@
     .log-comment{color:var(--warn);display:block;margin-top:4px;font-size:11px;font-style:italic}
     .log-actions{display:flex;gap:8px;margin-bottom:10px}
     #empty-state{text-align:center;color:var(--muted);padding:48px 20px;font-size:14px;line-height:1.6}
-    /* PTT Overlay */
-    #ptt-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;touch-action:none}
-    #ptt-overlay[hidden]{display:none!important}
-    #ptt-mic{font-size:60px;animation:pulse 1s infinite}
-    @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.15);opacity:.65}}
-    #ptt-label{color:var(--muted);font-size:12px;margin-top:8px;text-transform:uppercase;letter-spacing:.08em}
-    #ptt-transcript{color:var(--text);margin-top:16px;font-size:16px;text-align:center;padding:0 24px;max-width:320px;min-height:24px}
+    #btn-ptt.ptt-rec{box-shadow:0 0 0 3px var(--danger);animation:ptt-pulse 1s infinite}
+    @keyframes ptt-pulse{0%,100%{box-shadow:0 0 0 3px var(--danger)}50%{box-shadow:0 0 0 6px rgba(248,113,113,.35)}}
     /* Toast */
     #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);color:var(--text);padding:9px 18px;border-radius:20px;font-size:13px;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:80vw;text-align:center;pointer-events:none}
     #toast[hidden]{display:none!important}
@@ -114,12 +109,6 @@
   </div>
 </main>
 
-<div id="ptt-overlay" hidden>
-  <div id="ptt-mic">🎙</div>
-  <div id="ptt-label">Запись</div>
-  <div id="ptt-transcript"></div>
-</div>
-
 <div id="toast" hidden></div>
 
 <div id="settings-modal" hidden>
@@ -166,19 +155,7 @@ function toast(msg, ms = 3000) {
   toast._t = setTimeout(() => { el.hidden = true; }, ms);
 }
 
-function showOverlay(text) {
-  document.getElementById('ptt-transcript').textContent = text || '';
-  document.getElementById('ptt-overlay').hidden = false;
-}
 
-function hideOverlay() {
-  document.getElementById('ptt-overlay').hidden = true;
-  document.getElementById('ptt-transcript').textContent = '';
-}
-
-function setOverlayText(t) {
-  if (t) document.getElementById('ptt-transcript').textContent = t;
-}
 
 function escHtml(s) {
   return String(s || '')
@@ -694,8 +671,8 @@ const inputModule = (() => {
 
     // Показывает оверлей записи + outline на элементе
     function _setRec(on) {
-      if (on) { el.classList.add('ptt-rec'); showOverlay(''); }
-      else     { el.classList.remove('ptt-rec'); hideOverlay(); }
+      if (on) el.classList.add('ptt-rec');
+      else    el.classList.remove('ptt-rec');
     }
 
     // Touch: запись стартует только после 200мс без сдвига (не блокирует скролл)
@@ -713,7 +690,7 @@ const inputModule = (() => {
         r.onresult = ev => {
           for (let i = ev.resultIndex; i < ev.results.length; i++) {
             if (ev.results[i].isFinal) { transcript += ev.results[i][0].transcript; _interim = ''; }
-            else { _interim = ev.results[i][0].transcript; setOverlayText(_interim); }
+            else { _interim = ev.results[i][0].transcript; }
           }
         };
         r.onend = () => { recDone = true; };
@@ -795,7 +772,7 @@ const inputModule = (() => {
         r.onresult = ev => {
           for (let i = ev.resultIndex; i < ev.results.length; i++) {
             if (ev.results[i].isFinal) { _mTr += ev.results[i][0].transcript; _mIn = ''; }
-            else { _mIn = ev.results[i][0].transcript; setOverlayText(_mIn); }
+            else { _mIn = ev.results[i][0].transcript; }
           }
         };
         r.onend = () => { _mDone = true; };
