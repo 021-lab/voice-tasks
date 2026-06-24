@@ -1814,7 +1814,10 @@
       const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
       let recognition = null;
       let activeSession = null;
+      let debugPendingWrites = [];
       const touchSuppress = new WeakMap();
+      const SOURCE_FILE = "codex.html";
+      const SOURCE_MAP = {};
 
       function resolveSource(stage) {
         const hint = SOURCE_MAP[stage] || { fn: "receiveModule", line: null };
@@ -1836,7 +1839,7 @@
           .finally(() => {
             debugPendingWrites = debugPendingWrites.filter((item) => item !== pending);
             window.__receiveDebugPendingCount = debugPendingWrites.length;
-          });
+        });
         debugPendingWrites.push(pending);
         window.__receiveDebugPendingCount = debugPendingWrites.length;
         return pending;
