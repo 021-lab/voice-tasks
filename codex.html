@@ -589,14 +589,14 @@
             <h1>VoiceTasks</h1>
             <p>Долгое нажатие запускает голосовую команду. Короткий тап только подсвечивает задачу.</p>
           </div>
-          <button class="icon-btn" id="btn-settings" aria-label="Открыть настройки">⚙</button>
+          <button class="icon-btn" id="btn-settings" agent-action-id="btn-settings" aria-label="Открыть настройки">⚙</button>
         </div>
         <div class="hero-actions">
-          <button class="action-btn" id="btn-ptt">
+          <button class="action-btn" id="btn-ptt" agent-action-id="btn-ptt">
             <strong>Найди / Добавь</strong>
             <span>Держите кнопку и говорите</span>
           </button>
-          <button class="action-btn" id="btn-undo">
+          <button class="action-btn" id="btn-undo" agent-action-id="btn-undo">
             <strong>Undo</strong>
             <span>Последнее изменение</span>
           </button>
@@ -605,8 +605,8 @@
     </header>
 
     <div class="tabs">
-      <button class="tab-btn active" id="tab-tasks">Задачи</button>
-      <button class="tab-btn" id="tab-log">Лог</button>
+      <button class="tab-btn active" id="tab-tasks" agent-action-id="tab-tasks">Задачи</button>
+      <button class="tab-btn" id="tab-log" agent-action-id="tab-log">Лог</button>
     </div>
 
     <main>
@@ -621,8 +621,8 @@
 
       <section class="panel surface-card" id="log-panel" hidden>
         <div class="log-toolbar">
-          <button class="log-tool-btn" id="btn-clear-log">Очистить лог</button>
-          <button class="log-tool-btn" id="btn-copy-log">Копировать</button>
+          <button class="log-tool-btn" id="btn-clear-log" agent-action-id="btn-clear-log">Очистить лог</button>
+          <button class="log-tool-btn" id="btn-copy-log" agent-action-id="btn-copy-log">Копировать</button>
         </div>
         <div class="stack">
           <div class="empty-state" id="log-empty">
@@ -644,14 +644,14 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <div class="modal-root" id="settings-modal" hidden>
+  <div class="modal-root" id="settings-modal" agent-action-id="settings-modal" hidden>
     <div class="modal-card">
       <h2>Настройки</h2>
       <p>Вставьте `.env`-текст. Приложение работает только через proxy API, адрес proxy нужно задать как `QDRANT_PROXY_URL`.</p>
       <textarea id="settings-textarea" autocomplete="off" spellcheck="false" placeholder="QDRANT_PROXY_URL=https://toolbox.smileme.ai/MCP/qdrant2/user/...&#10;LLM_PROVIDER=openrouter&#10;LLM_KEY=sk-or-...&#10;LLM_MODEL=anthropic/claude-haiku-4-5-20251001"></textarea>
       <div class="modal-actions">
-        <button class="modal-btn" id="btn-close-settings">Отмена</button>
-        <button class="modal-btn primary" id="btn-save-settings">Сохранить</button>
+        <button class="modal-btn" id="btn-close-settings" agent-action-id="btn-close-settings">Отмена</button>
+        <button class="modal-btn primary" id="btn-save-settings" agent-action-id="btn-save-settings">Сохранить</button>
       </div>
     </div>
   </div>
@@ -1713,10 +1713,11 @@
       };
     })();
 
-    const receiveModule = (() => {
+    const inputModule = (() => {
       const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
       let recognition = null;
       let activeSession = null;
+      const touchSuppress = new WeakMap();
 
       function createRecognition() {
         if (!SpeechRecognitionCtor) {
@@ -1730,6 +1731,52 @@
         instance.maxAlternatives = 1;
         instance.continuous = false;
         return instance;
+      }
+
+      function parseActionId(actionId) {
+        const value = String(actionId || "").trim();
+        if (!value) {
+          return { kind: null, id: null, actionId: "" };
+        }
+        if (value.startsWith("task:")) {
+          return { kind: "task", id: value.slice(5), actionId: value };
+        }
+        if (value.startsWith("log:")) {
+          return { kind: "log", id: value.slice(4), actionId: value };
+        }
+        return { kind: value, id: null, actionId: value };
+      }
+
+      function getVoiceMeta(actionId, element) {
+        const parsed = parseActionId(actionId);
+        if (parsed.kind === "task") {
+          return {
+            actionId: parsed.actionId,
+            mode: "task",
+            taskId: parsed.id,
+            logId: null,
+            element,
+            overlayTitle: "Команда для задачи"
+          };
+        }
+        if (parsed.kind === "log") {
+          return {
+            actionId: parsed.actionId,
+            mode: "log",
+            taskId: null,
+            logId: parsed.id,
+            element,
+            overlayTitle: "Комментарий к логу"
+          };
+        }
+        return {
+          actionId: parsed.actionId,
+          mode: "search",
+          taskId: null,
+          logId: null,
+          element,
+          overlayTitle: "Найти или добавить"
+        };
       }
 
       function abortShortPress() {
@@ -1761,6 +1808,86 @@
         }
       }
 
+      async function handle(actionId, input) {
+        const parsed = parseActionId(actionId);
+        const type = input && input.type ? String(input.type) : "";
+        const text = type === "transcription" ? String(input.text || "").trim() : "";
+
+        if (type === "click") {
+          if (parsed.kind === "btn-settings") {
+            settingsModule.openModal();
+            return { ok: true };
+          }
+          if (parsed.kind === "btn-close-settings") {
+            settingsModule.closeModal();
+            return { ok: true };
+          }
+          if (parsed.kind === "btn-save-settings") {
+            settingsModule.save();
+            return { ok: true };
+          }
+          if (parsed.kind === "btn-clear-log") {
+            await logModule.clear();
+            return { ok: true };
+          }
+          if (parsed.kind === "btn-copy-log") {
+            await logModule.copy();
+            return { ok: true };
+          }
+          if (parsed.kind === "btn-undo") {
+            await undoModule.restore();
+            return { ok: true };
+          }
+          if (parsed.kind === "tab-tasks") {
+            showTasksPanel();
+            return { ok: true };
+          }
+          if (parsed.kind === "tab-log") {
+            showLogPanel();
+            return { ok: true };
+          }
+          if (parsed.kind === "settings-modal") {
+            settingsModule.closeModal();
+            return { ok: true };
+          }
+          return { ok: true };
+        }
+
+        if (type === "transcription") {
+          if (!text) {
+            toast("Ничего не распознано");
+            return { ok: false, error: "empty" };
+          }
+
+          if (parsed.kind === "search") {
+            await searchModule.handleTranscript(text);
+            return { ok: true };
+          }
+
+          if (parsed.kind === "task" && parsed.id) {
+            await extractModule.handle({
+              elementType: "task",
+              taskId: parsed.id,
+              transcript: text
+            });
+            return { ok: true };
+          }
+
+          if (parsed.kind === "log" && parsed.id) {
+            await logModule.emit("receive", "log", {
+              elementType: "log",
+              taskId: null,
+              transcript: text,
+              logId: parsed.id
+            });
+            await logModule.addVoiceComment(parsed.id, text);
+            return { ok: true };
+          }
+        }
+
+        return { ok: false, error: "unsupported" };
+      }
+
       function bindCommonHandlers(instance) {
         instance.onresult = (event) => {
           if (!activeSession) {
@@ -1773,7 +1900,7 @@
             if (event.results[i].isFinal) {
               finalText += piece + " ";
             } else {
-              interimText += piece;
+              interimText += piece + " ";
             }
           }
           activeSession.transcript = (finalText + interimText).trim();
@@ -1806,29 +1933,18 @@
             return;
           }
 
-          if (session.mode === "search") {
-            await searchModule.handleTranscript(transcript);
-            return;
-          }
+          await logModule.emit("receive", "raw", {
+            elementType: "voice",
+            taskId: session.taskId || null,
+            logId: session.logId || null,
+            mode: session.mode,
+            transcript
+          });
 
-          if (session.mode === "task") {
-            await extractModule.handle({
-              elementType: "task",
-              taskId: session.taskId,
-              transcript
-            });
-            return;
-          }
-
-          if (session.mode === "log") {
-            await logModule.emit("receive", "log", {
-              elementType: "log",
-              taskId: null,
-              transcript,
-              logId: session.logId
-            });
-            await logModule.addVoiceComment(session.logId, transcript);
-          }
+          await handle(session.actionId, {
+            type: "transcription",
+            text: transcript
+          });
         };
       }
 
@@ -1857,72 +1973,122 @@
         }
       }
 
-      function attachLongPress(element, metaFactory, shortTapHandler) {
-        let pressedAt = 0;
+      function bind(element) {
+        const actionId = element && element.getAttribute ? element.getAttribute("agent-action-id") : "";
+        const parsed = parseActionId(actionId);
+        if (!parsed.kind) {
+          return;
+        }
 
-        element.addEventListener("touchstart", (event) => {
-          event.preventDefault();
-          pressedAt = Date.now();
-          startSession(metaFactory(element));
-        }, { passive: false });
+        if (parsed.kind === "task" || parsed.kind === "log" || parsed.kind === "btn-ptt") {
+          let pressedAt = 0;
+          let moved = false;
+          let startX = 0;
+          let startY = 0;
+          let touchSuppressed = false;
 
-        element.addEventListener("touchend", (event) => {
-          event.preventDefault();
-          const delta = Date.now() - pressedAt;
-          if (delta < 200) {
-            abortShortPress();
-            if (typeof shortTapHandler === "function") {
-              shortTapHandler(element);
+          element.addEventListener("touchstart", (event) => {
+            const touch = event.touches && event.touches[0] ? event.touches[0] : null;
+            pressedAt = Date.now();
+            moved = false;
+            touchSuppressed = false;
+            if (touch) {
+              startX = touch.clientX;
+              startY = touch.clientY;
             }
+            startSession(getVoiceMeta(actionId, element));
+          }, { passive: true });
+
+          element.addEventListener("touchmove", (event) => {
+            const touch = event.touches && event.touches[0] ? event.touches[0] : null;
+            if (!touch) {
+              return;
+            }
+            const dx = Math.abs(touch.clientX - startX);
+            const dy = Math.abs(touch.clientY - startY);
+            if (dx > 12 || dy > 12) {
+              moved = true;
+              touchSuppressed = true;
+              abortShortPress();
+            }
+          }, { passive: true });
+
+          element.addEventListener("touchend", () => {
+            const delta = Date.now() - pressedAt;
+            if (moved) {
+              return;
+            }
+            if (delta < 200) {
+              abortShortPress();
+              touchSuppressed = true;
+              flashElement(element);
+              return;
+            }
+            finishPress();
+            touchSuppressed = true;
+          }, { passive: true });
+
+          element.addEventListener("touchcancel", () => {
+            abortShortPress();
+          }, { passive: true });
+
+          element.addEventListener("click", () => {
+            if (touchSuppressed) {
+              return;
+            }
+            flashElement(element);
+          });
+          return;
+        }
+
+        if (parsed.kind === "settings-modal") {
+          element.addEventListener("touchend", async (event) => {
+            if (event.target !== element) {
+              return;
+            }
+            await handle(actionId, { type: "click" });
+          }, { passive: true });
+
+          element.addEventListener("click", async (event) => {
+            if (event.target !== element) {
+              return;
+            }
+            await handle(actionId, { type: "click" });
+          });
+          return;
+        }
+
+        let lastTouchAt = 0;
+        element.addEventListener("touchend", async () => {
+          lastTouchAt = Date.now();
+          await handle(actionId, { type: "click" });
+        }, { passive: true });
+
+        element.addEventListener("click", async () => {
+          if (Date.now() - lastTouchAt < 600) {
             return;
           }
-          finishPress();
-        }, { passive: false });
-
-        element.addEventListener("touchcancel", () => {
-          abortShortPress();
-        }, { passive: false });
-      }
-
-      function bindTaskElement(element) {
-        attachLongPress(element, () => ({
-          mode: "task",
-          taskId: element.dataset.taskId,
-          element,
-          overlayTitle: "Команда для задачи"
-        }), flashElement);
-      }
-
-      function bindLogElement(element) {
-        attachLongPress(element, () => ({
-          mode: "log",
-          logId: element.dataset.logId,
-          element,
-          overlayTitle: "Комментарий к логу"
-        }), flashElement);
-      }
-
-      function bindSearchButton() {
-        attachLongPress(dom.btnPtt, () => ({
-          mode: "search",
-          element: dom.btnPtt,
-          overlayTitle: "Найти или добавить"
-        }));
+          await handle(actionId, { type: "click" });
+        });
       }
 
       return {
-        bindTaskElement,
-        bindLogElement,
-        bindSearchButton
+        bind,
+        handle
       };
     })();
+
+    // AGENT TEST HOOK: test agents can invoke the input interpreter directly.
+    // Example: window.__agentInvoke("btn-undo", { type: "click" })
+    // Example: window.__agentInvoke("task:123", { type: "transcription", text: "в архив" })
+    window.__agentInvoke = (elementId, input) => inputModule.handle(elementId, input);
 
     function renderTasks(tasks) {
       const items = Array.isArray(tasks) ? tasks : [];
       dom.taskList.innerHTML = items.map((task) => {
         const tags = Array.isArray(task.tags) ? task.tags : [];
         return [
-          '<li class="task-item" data-task-id="' + escapeHtml(task.id) + '" data-status="' + escapeHtml(task.status || "сегодня") + '">',
+          '<li class="task-item" agent-action-id="task:' + escapeHtml(task.id) + '" data-task-id="' + escapeHtml(task.id) + '" data-status="' + escapeHtml(task.status || "сегодня") + '">',
           '  <div class="task-head">',
           '    <div class="task-glyph">' + escapeHtml(STATUS_ICONS[task.status] || "•") + '</div>',
           '    <div>',
@@ -1938,7 +2104,7 @@
       }).join("");
       dom.taskEmpty.hidden = items.length > 0;
       Array.from(dom.taskList.querySelectorAll("[data-task-id]")).forEach((element) => {
-        receiveModule.bindTaskElement(element);
+        inputModule.bind(element);
       });
     }
 
@@ -1946,7 +2112,7 @@
       const items = Array.isArray(logs) ? logs : [];
       dom.logList.innerHTML = items.map((entry) => {
         return [
-          '<li class="log-item" data-log-id="' + escapeHtml(entry.id) + '">',
+          '<li class="log-item" agent-action-id="log:' + escapeHtml(entry.id) + '" data-log-id="' + escapeHtml(entry.id) + '">',
           '  <div class="log-head">',
           '    <div class="log-glyph">↔</div>',
           '    <div>',
@@ -1961,7 +2127,7 @@
       }).join("");
       dom.logEmpty.hidden = items.length > 0;
       Array.from(dom.logList.querySelectorAll("[data-log-id]")).forEach((element) => {
-        receiveModule.bindLogElement(element);
+        inputModule.bind(element);
       });
     }
 
@@ -1994,21 +2160,16 @@
       }
 
       function bindUI() {
-        dom.btnSettings.addEventListener("click", settingsModule.openModal);
-        dom.btnCloseSettings.addEventListener("click", settingsModule.closeModal);
-        dom.btnSaveSettings.addEventListener("click", settingsModule.save);
-        dom.btnUndo.addEventListener("click", async () => {
-          await undoModule.restore();
-        });
-        dom.btnClearLog.addEventListener("click", async () => {
-          await logModule.clear();
-        });
-        dom.btnCopyLog.addEventListener("click", async () => {
-          await logModule.copy();
-        });
-        dom.tabTasks.addEventListener("click", showTasksPanel);
-        dom.tabLog.addEventListener("click", showLogPanel);
-        receiveModule.bindSearchButton();
+        inputModule.bind(dom.btnSettings);
+        inputModule.bind(dom.btnCloseSettings);
+        inputModule.bind(dom.btnSaveSettings);
+        inputModule.bind(dom.btnPtt);
+        inputModule.bind(dom.btnUndo);
+        inputModule.bind(dom.btnClearLog);
+        inputModule.bind(dom.btnCopyLog);
+        inputModule.bind(dom.tabTasks);
+        inputModule.bind(dom.tabLog);
+        inputModule.bind(dom.settingsModal);
       }
 
       async function init() {
