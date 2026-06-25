@@ -510,6 +510,11 @@ const logModule = (() => {
     const entry = window.__logCache.find(e => e.id === logId);
     if (entry) {
       entry.comment = comment;
+      try {
+        const arr = _lsLoad();
+        const idx = arr.findIndex(e => e.id === logId);
+        if (idx >= 0) { arr[idx].comment = comment; localStorage.setItem(_LS_KEY, JSON.stringify(arr)); }
+      } catch (_) {}
       await storageModule.updateLogComment(logId, comment);
       renderLogList();
     }
