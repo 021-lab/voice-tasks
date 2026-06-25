@@ -116,7 +116,7 @@
     <h2>⚙ Настройки</h2>
     <p>Вставьте .env текст и нажмите «Сохранить»:</p>
     <textarea id="settings-textarea" rows="8" autocomplete="off" autocorrect="off" spellcheck="false"
-      placeholder="QDRANT_URL=https://xxx.qdrant.io&#10;QDRANT_KEY=abc123&#10;LLM_PROVIDER=openrouter&#10;LLM_KEY=sk-or-...&#10;LLM_MODEL=anthropic/claude-haiku-4-5-20251001"></textarea>
+      placeholder="QDRANT_URL=https://toolbox.smileme.ai/MCP/qdrant2/user/Claude-AlWGdyb3FYfIPZT3A&#10;LLM_PROVIDER=openrouter&#10;LLM_KEY=sk-or-...&#10;LLM_MODEL=anthropic/claude-haiku-4-5-20251001"></textarea>
     <div class="dialog-btns">
       <button class="btn" id="btn-test-qdrant" agent-action-id="btn-test-qdrant">Тест связи</button>
       <button class="btn" id="btn-close-settings" agent-action-id="btn-close-settings">Отмена</button>
@@ -186,7 +186,9 @@ const settingsModule = (() => {
   }
 
   function openModal() {
-    document.getElementById('settings-textarea').value = localStorage.getItem('vt_env') || '';
+    const stored = localStorage.getItem('vt_env') || '';
+    document.getElementById('settings-textarea').value = stored ||
+      'QDRANT_URL=https://toolbox.smileme.ai/MCP/qdrant2/user/Claude-AlWGdyb3FYfIPZT3A';
     document.getElementById('settings-modal').hidden = false;
   }
 
@@ -223,10 +225,9 @@ const QdrantBackend = (() => {
     const cfg = window.__cfg || {};
     if (!cfg.qdrantUrl) throw Object.assign(new Error('QDRANT_URL не настроен'), { status: 0 });
     const url = cfg.qdrantUrl.replace(/\/$/, '') + path;
-    const opts = {
-      method,
-      headers: { 'Content-Type': 'application/json', 'api-key': cfg.qdrantKey || '' }
-    };
+    const headers = { 'Content-Type': 'application/json' };
+    if (cfg.qdrantKey) headers['api-key'] = cfg.qdrantKey;
+    const opts = { method, headers };
     if (body !== undefined) opts.body = JSON.stringify(body);
     const res = await fetch(url, opts);
     if (!res.ok) {
@@ -926,9 +927,9 @@ const interpreterModule = (() => {
         const btn = document.getElementById('btn-test-qdrant');
         btn.textContent = '...';
         try {
-          const res = await fetch(url.replace(/\/$/, '') + '/collections', {
-            headers: { 'api-key': window.__cfg.qdrantKey || '' }
-          });
+          const testHeaders = {};
+          if (window.__cfg.qdrantKey) testHeaders['api-key'] = window.__cfg.qdrantKey;
+          const res = await fetch(url.replace(/\/$/, '') + '/collections', { headers: testHeaders });
           if (res.ok) {
             const d = await res.json();
             toast('✓ Qdrant OK: ' + (d.result?.collections?.length || 0) + ' коллекций');
