@@ -590,13 +590,21 @@ const extractModule = (() => {
     } else if (/^удали/.test(t)) {
       p = { op: 'delete', task: { id: taskId } };
 
-    // Archive / status shortcuts
-    } else if (/^в архив/.test(t)) {
+    // Archive / status shortcuts — включая «перенеси в …», «переведи в …», «поставь …»
+    } else if (/(?:^|в\s+)архив/.test(t) || /^заархивируй/.test(t)) {
       p = { op: 'update', task: { id: taskId, status: 'архив' } };
-    } else if (/^сделано/.test(t) || /^готово/.test(t)) {
+    } else if (/^сделано/.test(t) || /^готово/.test(t) || /(?:^|в\s+)сделано/.test(t)) {
       p = { op: 'update', task: { id: taskId, status: 'сделано' } };
-    } else if (/^в фокус/.test(t)) {
+    } else if (/(?:^|в\s+)фокус/.test(t)) {
       p = { op: 'update', task: { id: taskId, status: 'фокус' } };
+    } else if (/(?:^|в\s+)(?:жду|ожидание|ожидаю)/.test(t)) {
+      p = { op: 'update', task: { id: taskId, status: 'жду' } };
+    } else if (/(?:^|в\s+)(?:отложено|отложи|на потом)/.test(t)) {
+      p = { op: 'update', task: { id: taskId, status: 'отложено' } };
+    } else if (/(?:^|в\s+)(?:делегирована|делегируй|делегировать)/.test(t)) {
+      p = { op: 'update', task: { id: taskId, status: 'делегирована' } };
+    } else if (/(?:^|в\s+)сегодня/.test(t) || /^верни/.test(t)) {
+      p = { op: 'update', task: { id: taskId, status: 'сегодня' } };
 
     // Tags: «тег важное», «добавь тег срочно», «убери тег», «убрать тег»
     } else if (/^(?:добавь?(?:те)?|добавить|поставить|поставь?(?:те)?)?\s*тег[и]?\s+\S/.test(t)) {
