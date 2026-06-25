@@ -916,11 +916,24 @@
     })();
 
     const QdrantBackend = (() => {
-      const collections = new Set();
+      const collectionsByScope = new Map();
       const FALLBACK_STORE = {
         tasks: new Map(),
         log: new Map()
       };
+
+      function getScopeKey() {
+        const cfg = window.__cfg || {};
+        return cfg.qdrantProxyUrl ? "proxy:" + cfg.qdrantProxyUrl.replace(/\/$/, "") : "fallback";
+      }
+
+      function getCollections() {
+        const scopeKey = getScopeKey();
+        if (!collectionsByScope.has(scopeKey)) {
+          collectionsByScope.set(scopeKey, new Set());
+        }
+        return collectionsByScope.get(scopeKey);
+      }
 
       async function _req(method, path, body) {
         const cfg = window.__cfg || {};
@@ -963,7 +976,7 @@
         const deleteMatch = route.match(/^\/collections\/([^/]+)\/points\/delete$/);
 
         if (collectionMatch) {
-          collections.add(collectionMatch[1]);
+          getCollections().add(collectionMatch[1]);
           return { result: true };
         }
 
@@ -1054,6 +1067,7 @@
       }
 
       async function ensureCollection(name) {
+        const collections = getCollections();
         if (collections.has(name)) {
           return;
         }
