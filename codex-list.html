@@ -407,7 +407,15 @@ const storageModule = (() => {
     }
   }
 
-  async function saveLog(e) { try { await QdrantBackend.saveLog(e); } catch (_) {} }
+  async function saveLog(e) {
+    if (!(window.__cfg && window.__cfg.qdrantUrl)) return;
+    for (let i = 0; i < 3; i++) {
+      try { await QdrantBackend.saveLog(e); return; } catch (err) {
+        if (i < 2) await new Promise(r => setTimeout(r, 400));
+        else console.warn('[VT] saveLog failed:', err.message);
+      }
+    }
+  }
   async function getLogs() { try { return await QdrantBackend.getLogs(); } catch (_) { return []; } }
   async function clearLogs() { try { await QdrantBackend.clearLogs(); } catch (_) {} }
   async function updateLogComment(id, c) { try { await QdrantBackend.updateLogComment(id, c); } catch (_) {} }
@@ -464,7 +472,7 @@ const logModule = (() => {
     window.__logCache.push(entry);
     _lsPush(entry);
     renderLogList();
-    storageModule.saveLog(entry);
+    await storageModule.saveLog(entry);
   }
 
   function renderLogList() {
