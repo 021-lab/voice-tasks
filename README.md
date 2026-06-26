@@ -37,7 +37,7 @@ LLM_MODEL=anthropic/claude-haiku-4-5-20251001
 ## Архитектура
 
 ```
-index.html
+codex.html
 ├── [HTML + CSS]
 └── [JS-модули inline]
     ├── settingsModule   — .env textarea → localStorage['vt_env'] → window.__cfg

@@ -77,7 +77,7 @@ function installQdrantProxyMock(page) {
 async function openApp(page) {
   const collections = installQdrantProxyMock(page);
   await page.addInitScript((value) => localStorage.setItem("vt_env", value), env);
-  await page.goto("/");
+  await page.goto("/codex.html");
   await expect(page.locator("#settings-modal")).toBeHidden();
   await expect(page.locator("#task-list")).toBeAttached();
   return collections;
