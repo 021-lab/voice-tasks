@@ -122,6 +122,7 @@
       <button class="btn" id="btn-close-settings" agent-action-id="btn-close-settings">Отмена</button>
       <button class="btn" id="btn-save-settings" agent-action-id="btn-save-settings">Сохранить</button>
     </div>
+    <div id="qdrant-status" style="font-size:11px;margin-top:8px;color:var(--muted);word-break:break-all;min-height:1.4em"></div>
   </div>
 </div>
 
@@ -944,22 +945,36 @@ const interpreterModule = (() => {
         settingsModule.closeModal();
       } else if (elementId === 'btn-test-qdrant') {
         const url = window.__cfg && window.__cfg.qdrantUrl;
-        if (!url) { toast('QDRANT_URL не настроен'); return; }
+        const statusEl = document.getElementById('qdrant-status');
+        if (!url) { toast('QDRANT_URL не настроен'); if (statusEl) statusEl.textContent = '⚠ QDRANT_URL не задан'; return; }
         const btn = document.getElementById('btn-test-qdrant');
         btn.textContent = '...';
+        if (statusEl) statusEl.textContent = '⏳ проверяем...';
         try {
-          const testHeaders = {};
+          const testHeaders = { 'Content-Type': 'application/json' };
           if (window.__cfg.qdrantKey) testHeaders['api-key'] = window.__cfg.qdrantKey;
           const res = await fetch(url.replace(/\/$/, '') + '/collections', { headers: testHeaders });
           if (res.ok) {
             const d = await res.json();
-            toast('✓ Qdrant OK: ' + (d.result?.collections?.length || 0) + ' коллекций');
+            const colls = (d.result && d.result.collections || []).map(c => c.name || c).join(', ') || '—';
+            const msg = `✅ OK (HTTP ${res.status}) — коллекции: ${colls}`;
+            toast('✓ Qdrant OK');
+            if (statusEl) statusEl.textContent = msg;
+            window.__qdrantDiag = { ok: true, status: res.status, collections: colls, ts: Date.now() };
           } else {
+            const msg = `❌ HTTP ${res.status}`;
             toast('HTTP ' + res.status + ' — проверьте ключ');
+            if (statusEl) statusEl.textContent = msg;
+            window.__qdrantDiag = { ok: false, type: 'http', status: res.status, ts: Date.now() };
           }
         } catch (e) {
+          const isNetwork = e instanceof TypeError;
+          const type = isNetwork ? 'network/CORS' : 'unknown';
+          const msg = `❌ ${type}: ${e.message}`;
           toast('Нет связи: ' + e.message);
-          LOG.emit('settings', 'error', { error: e.message });
+          if (statusEl) statusEl.textContent = msg;
+          window.__qdrantDiag = { ok: false, type, error: e.message, ts: Date.now() };
+          LOG.emit('settings', 'error', { error: e.message, type });
         } finally { btn.textContent = 'Тест связи'; }
       }
     } else if (input.type === 'transcription') {
